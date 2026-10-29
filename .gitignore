@@ -1,0 +1,11 @@
+.deps/
+.venv*/
+assets/
+datasets/
+runs/
+.cache/
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pending*

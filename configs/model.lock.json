@@ -1,0 +1,43 @@
+{
+  "model_id": "Qwen/Qwen2.5-3B-Instruct",
+  "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "license": "qwen-research",
+  "files": {
+    "config.json": {
+      "bytes": 661,
+      "git_blob": "51b83fbd4e2d363b60235b9c8d494046a83c1cbf"
+    },
+    "generation_config.json": {
+      "bytes": 242,
+      "git_blob": "bf077f03dc569cfb8a90b3ec1ad20365a620bad6"
+    },
+    "merges.txt": {
+      "bytes": 1671839,
+      "git_blob": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0"
+    },
+    "model-00001-of-00002.safetensors": {
+      "bytes": 3968658944,
+      "sha256": "67347b23fb4165b652eb6611f5e1f2a06dfcddba8e909df1b2b0b1857bee06c2"
+    },
+    "model-00002-of-00002.safetensors": {
+      "bytes": 2203268048,
+      "sha256": "a40d941d0e7e0b966ad8b62bb6d6b7c88cce1299197b599d9d0a4ce59aabfc1d"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 35581,
+      "git_blob": "38047c6284a25427043f0ab040f623a2a20dd093"
+    },
+    "tokenizer.json": {
+      "bytes": 7031645,
+      "git_blob": "443909a61d429dff23010e5bddd28ff530edda00"
+    },
+    "tokenizer_config.json": {
+      "bytes": 7305,
+      "git_blob": "07bfe0640cb5a0037f9322287fbfc682806cf672"
+    },
+    "vocab.json": {
+      "bytes": 2776833,
+      "git_blob": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  }
+}

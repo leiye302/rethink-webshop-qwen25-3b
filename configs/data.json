@@ -1,0 +1,27 @@
+{
+  "schema": "webshop-public-frozen-sft-v1",
+  "train_good": 7500,
+  "train_bad": 4500,
+  "validation_good": 631,
+  "validation_bad": 271,
+  "generation_good": 100,
+  "generation_bad": 100,
+  "source_collection_model": "Qwen/Qwen2.5-3B-Instruct",
+  "source_collection_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "source_manifest_sha256": "be18ecf06a2f92d515ed9d16d0ed81954fd47a02bd45a87076be46f397e9afd2",
+  "files": {
+    "train.jsonl": {
+      "bytes": 71268028,
+      "sha256": "db060c4703fa0b0fba767696d32597be6d2bc22d7e9067ca054c6b0776180888"
+    },
+    "val.jsonl": {
+      "bytes": 5199383,
+      "sha256": "7d344341478091fd5bb9e592bcd25f4e563d12ac05131b5234fd79ad30d85fd1"
+    },
+    "generation_val200.jsonl": {
+      "bytes": 1157450,
+      "sha256": "85d40da59056ee405d4b99f5cad044f46d0567a3b405efcd97cd0ad2a18b9047"
+    }
+  },
+  "bundle_sha256": "d15fefd08f2707ff93eff7f6aa55c82f5ac2f2e307c3f4b904b9ce98d075d1f7"
+}

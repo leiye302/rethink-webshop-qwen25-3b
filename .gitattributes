@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.zip -text
+patches/*.patch -text
+src/sft_reference/** -text

@@ -1,0 +1,9 @@
+{
+  "upstream_commit": "d511f043afe9199b8576fc99ea52e12d84841f32",
+  "environment_seed": 0,
+  "environment_profile": "sdar_default",
+  "use_small": true,
+  "human_goals": false,
+  "full_catalog_required": false,
+  "history_length": 2
+}

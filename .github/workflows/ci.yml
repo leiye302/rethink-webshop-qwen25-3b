@@ -1,0 +1,24 @@
+name: CPU reproducibility contract
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  cpu:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Minimal CPU dependencies
+        run: |
+          pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy==1.26.4 pytest==8.4.2 transformers==4.57.1 omegaconf==2.3.0
+      - name: Fetch and check exact public upstream
+        env:
+          PYTHONPATH: src
+        run: python -m rethink_webshop.setup --framework --data --verify
+      - name: CPU tests including actual upstream Teacher builder
+        run: pytest -q
+      - name: Publication privacy and historical blobs
+        run: python scripts/check_release.py

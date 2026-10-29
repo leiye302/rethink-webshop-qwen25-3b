@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/ZJU-REAL/SDAR",
+  "commit": "d511f043afe9199b8576fc99ea52e12d84841f32",
+  "patch_sha256": "85b50a78974117766efc523bf2b5e5a2234a9c21730a5a9791cd35c0981362f0",
+  "patched_files": {
+    "agent_system/multi_turn_rollout/rollout_loop.py": "0fa693c95a065c9754ac90fec99ad6fe4964adeffeaebfb9331ca736c26f7e9e",
+    "verl/trainer/ppo/skillsd_ray_trainer.py": "e69f97ead512aaa6043c6503de3276aac9a2c27173db7fefd0129c6aa523ff25",
+    "agent_system/environments/env_package/webshop/envs.py": "ca811dea4ac36e90f612b12f40a36327ceddeb581adce5bd9b998810ed0f9547"
+  },
+  "unchanged_files": {
+    "verl/trainer/ppo/sdar_utils.py": "329ee3a73e05d3ab9817dd59d69394dd6ba3df85ca9abe9ddebc0e2c2682ad68",
+    "verl/workers/actor/dp_actor.py": "5f6246d807cab4e7abc3314ac026348ec6d7bd5e50788a2da67ac0b7495af221",
+    "verl/trainer/ppo/core_algos.py": "5043f97b87b00ab5c5d907022ea6cf148b935fdb71c37222a3f9c33ccfaf1dc6",
+    "verl/trainer/ppo/rlsd_utils.py": "2d36be3299d9374f2235e837024e284049a90704b43db676c3e792682a6cdd07",
+    "verl/trainer/ppo/rlsd_ray_trainer.py": "019f6f3010108abe360bb96f8b9b13daf87d1ba29fcf6bb986e31b1b12136be2",
+    "agent_system/environments/prompts/webshop.py": "c7411b8a8fe1f8d587a5585a57ce3ae85ab87bbd7a021f2e39c03f97e214b738",
+    "agent_system/environments/env_manager.py": "6294aef97cf12775222b8c189273f990065ecca13d1308650311ebe0ab1c64f5",
+    "agent_system/environments/env_package/webshop/projection.py": "0808d4643459acf2a4c496eab3fc8735025c440f28cc517066355a1f5fbc048f",
+    "agent_system/memory/memory.py": "d9940bf9d49442f76667b80aff7e80b7c93f37bef015b06641e60229bb3f0d9c",
+    "examples/grpo_opsd_trainer/run_webshop_3b.sh": "c49f6359016a47d8138c056a1d22bd4ed520130a9bd3b8cf9e7c7deb356ce4fb",
+    "verl/trainer/config/ppo_trainer.yaml": "0f69218f169aed29a827818ca76fb26f7c1c5632bd9cbe318884617d5aa228cc",
+    "skills/webshop/accessories.md": "3c30dfc2ce78b4aeaeba522f0ea8a53643c929bcbe9e24088d781eaef28c52fc",
+    "skills/webshop/apparel.md": "071f8bbcec3cb8e66c3a9fe5f9c6b821b0e1b9db0a14d4257c594fe66898ef7e",
+    "skills/webshop/beauty_health.md": "8125ecd30a53f06629711d974ada86ab05fd05e8c8d7b1f461263cc31f546974",
+    "skills/webshop/claude_style_skills.json": "79c6c60b6757b6b730e7471b537781936ce0e9cdbd8df6188b57c535893aec20",
+    "skills/webshop/electronics.md": "ab8464faa51932f79f5220f098876e5437e88df1c20d8bd3599ce3e2de84067c",
+    "skills/webshop/footwear.md": "aeb65d1a9acb173f62eaf5f14c42e24ff46aac8d8797c312a03000cc01300ac1",
+    "skills/webshop/general_skills.md": "83f5bfca6d1012cce6c703475556d854fa833f03ce6083fa9d3bcc9c10b5fc80",
+    "skills/webshop/generated_memories_webshop_100.json": "7e8d1afd44f9a056335a032eed965d43e31b1ffc39456468e1329fa163cb369d",
+    "skills/webshop/generated_memories_webshop_101-200.json": "6074099405865614d43c5fee585969e3058fa3f6220befe2cad6963ac19d85d1",
+    "skills/webshop/home_decor.md": "7919d5ce2b18aa7ea4a62a619b8e3b9ef94837b9a7fe78f062a0237607a225db",
+    "skills/webshop/other.md": "1f3d5dc971753f3ec4b72b423f07f61769659671ca607d603c57d53b318fbbc6",
+    "skills/webshop/skill_mapping.json": "5e88f4f7621b19d64a5396d1e29afa8740ef157dc72980fe033c2c74c072730f",
+    "skills/webshop/webshop_skills_nl.md": "c54e88035950933750ba4e0dc89436fedeb19d50ef395450d1a33d04801940fa"
+  }
+}

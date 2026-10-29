@@ -1,0 +1,91 @@
+{
+  "repository": "leiye302/rethink-webshop-qwen25-3b",
+  "tag": "route-sft1500-v1",
+  "step": 1500,
+  "assets": {
+    "LICENSE": {
+      "bytes": 7388,
+      "sha256": "ef52482bb785733093dc9a2e8edd8e764c77d12d8e9d8f10a80c9b547d32d0f9"
+    },
+    "README.md": {
+      "bytes": 1990,
+      "sha256": "85777b41ca596b08bb021d5c867f043e67d5f95808c37f58acbc3b4f11170160"
+    },
+    "SHA256SUMS": {
+      "bytes": 1538,
+      "sha256": "df0d054760bcc77e84e0da4ff6a0a5bc424e0370f20de4ac07964ed1a6196569"
+    },
+    "checkpoint_manifest.json": {
+      "bytes": 2913,
+      "sha256": "43b42d9cdad9ed136d125ca8732e759787a79ac4cc763f83f5f6b79aecec12f1"
+    },
+    "added_tokens.json": {
+      "bytes": 628,
+      "sha256": "cfd9cf1a2b9c590e08143158dd8064eef442956e2f3f4474c93e20704e4382d7"
+    },
+    "chat_template.jinja": {
+      "bytes": 2507,
+      "sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f"
+    },
+    "config.json": {
+      "bytes": 1493,
+      "sha256": "e5f54aa97a3f8361392fa41065ca08118de7ff12143b49404440c74d37a66fc3"
+    },
+    "generation_config.json": {
+      "bytes": 243,
+      "sha256": "56bcea7e8cc49dfa450ce7cdaf629a8dd0fc15b4aabf958d03db53f48be56ce1"
+    },
+    "merges.txt": {
+      "bytes": 1671853,
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+    },
+    "model-00001-of-00007.safetensors": {
+      "bytes": 1989215912,
+      "sha256": "0c06cc007cbd3fc2c09ad972aa6946653a41c3df7f36dca432918b68cd5783f8"
+    },
+    "model-00002-of-00007.safetensors": {
+      "bytes": 1940033552,
+      "sha256": "7d0ca9fd0311167be68e3ad47c3b7f7693f5fa5ca063224cc4c83a43f567f46e"
+    },
+    "model-00003-of-00007.safetensors": {
+      "bytes": 1977809984,
+      "sha256": "7f25a1bea106bdd577b357defb13f631a99ce8c91efaece30b633e46cd9c01a7"
+    },
+    "model-00004-of-00007.safetensors": {
+      "bytes": 1940033624,
+      "sha256": "07b046cf3e1cc0148998f7028e8d3f677b81a2c22a2e545e7efeb9923db3fc44"
+    },
+    "model-00005-of-00007.safetensors": {
+      "bytes": 1940033624,
+      "sha256": "a48863f8a7ed8a7ad6d978026af82f033171349358b74535066cab818b6a32c2"
+    },
+    "model-00006-of-00007.safetensors": {
+      "bytes": 1977810000,
+      "sha256": "3a097c4fbfbd38cb25e2567a1d379ecaf102106a1be9adc9e00268514d8ae34c"
+    },
+    "model-00007-of-00007.safetensors": {
+      "bytes": 578867168,
+      "sha256": "12a505c3c567fff23270b77043a49d52ee42c2395cfc0cc48abcafe20f95d354"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 35618,
+      "sha256": "8058d922d3b217bf431bd5d62edf05e3f7887c5eef2f4ec37e8142b7790b22b9"
+    },
+    "special_tokens_map.json": {
+      "bytes": 642,
+      "sha256": "09fbae93cf8bfe51c3155d079171ac177555eedc197661cfaf29a2dc5c5afcd8"
+    },
+    "tokenizer.json": {
+      "bytes": 11422082,
+      "sha256": "5d517fa060dc44dc8a3b6ecfd995d6a838ba53a30964d8f0210d7b08d891d623"
+    },
+    "tokenizer_config.json": {
+      "bytes": 4879,
+      "sha256": "4e6bcd16d4cdf010dc88736c262ba4939b016947268a62501cbf7f6aa1efa288"
+    },
+    "vocab.json": {
+      "bytes": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    }
+  }
+}
