@@ -117,4 +117,3 @@ def action_admissible(action, available):
         # operators are never exposed as an ordinary Actor action.
         return bool(available["has_search_bar"] and arg and not re.search(r"<[aqcr]>", arg))
     return arg != "search" and arg in {str(x).lower() for x in available["clickables"]}
-
