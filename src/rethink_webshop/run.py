@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 from .common import ROOT, UPSTREAM, confined, load, atomic_json, sha
+from .hardware import WORLD_SIZE, check_cuda, validate_visible_devices
 
 
 def placeholders():
@@ -73,8 +74,8 @@ def resume_checkpoint(output):
         raise ValueError('Invalid native resume step')
     checkpoint=directory/f'global_step_{int(text)}'
     required=[checkpoint/'data.pt']
-    required += [checkpoint/'actor'/f'{kind}_world_size_2_rank_{rank}.pt'
-                 for rank in range(2) for kind in ['model','optim','extra_state']]
+    required += [checkpoint/'actor'/f'{kind}_world_size_{WORLD_SIZE}_rank_{rank}.pt'
+                 for rank in range(WORLD_SIZE) for kind in ['model','optim','extra_state']]
     if any(not p.is_file() or not p.stat().st_size for p in required):
         raise ValueError('Missing native model/optimizer/RNG/dataloader resume files')
     return checkpoint
@@ -103,9 +104,9 @@ def main():
         print('Native SDAR configuration prepared; no model, API or CUDA was used.'); return
     if not os.environ.get('CUDA_VISIBLE_DEVICES'):
         p.error('Explicitly set the GPUs allocated to this job')
+    validate_visible_devices(os.environ['CUDA_VISIBLE_DEVICES'])
     import torch
-    if torch.cuda.device_count()!=2:
-        raise RuntimeError('This pinned native launcher requires exactly two exposed GPUs (TP2)')
+    hardware=check_cuda(torch)
     from .assets import verify as verify_assets
     verify_assets()
     identity=validate_actor(actor,a.baseline)
@@ -114,7 +115,8 @@ def main():
     if receipt.exists() and not a.resume:
         raise FileExistsError('This run already exists; explicitly --resume it or use a new run directory')
     identity.update({'recipe_sha256':sha(ROOT/'configs/opsd.json'),'upstream_sha256':sha(ROOT/'configs/upstream.json'),
-                     'actor':str(actor.relative_to(ROOT)),'validation_sha256':sha(ROOT/'configs/eval128.json')})
+                     'actor':str(actor.relative_to(ROOT)),'validation_sha256':sha(ROOT/'configs/eval128.json'),
+                     'world_size':WORLD_SIZE,'rollout_tensor_parallel':2})
     if a.resume and (not receipt.exists() or json.loads(receipt.read_text())!=identity):
         raise ValueError('Resume Actor/recipe/validation identity mismatch')
     private=None
@@ -139,6 +141,8 @@ def main():
              'JAVA_HOME':str(ROOT/'assets/java'),'JVM_PATH':str(ROOT/'assets/java/lib/server/libjvm.so'),
              'TOKENIZERS_PARALLELISM':'false','RAY_ADDRESS':'local','VLLM_USE_V1':'1'})
     atomic_json(receipt,identity)
+    atomic_json(output/'hardware.json',{'profile':'4xA100-80GB','devices':hardware,
+                                      'rollout_tp':2,'rollout_dp':2,'fsdp_world_size':WORLD_SIZE})
     OmegaConf.save(cfg,output/'resolved_config.yaml')
     sys.path.insert(0,str(UPSTREAM)); os.chdir(UPSTREAM)
     from verl.trainer.main_sdar import run_sdar

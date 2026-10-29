@@ -29,6 +29,16 @@
 repeatable. Test doubles validate information flow; they are not real distributed
 Actor/vLLM training. No fixed initial Teacher is introduced by those doubles.
 
+## Four-A100 profile
+
+The4×A100-80GB update adds guards for device count/model/visible VRAM, native
+global-microbatch/padding equivalence, rejection of old two-rank resumes, and
+a real4-process CPU Gloo test using the production SFT update/checkpoint code.
+That test compares three sample-mean CE+BCE/AdamW updates against serial8-row
+execution, with a complete four-rank RNG/optimizer/scheduler checkpoint/resume
+between updates2 and3. See CI for the current commit's result; this is not a
+CUDA/NCCL/A100 memory or throughput test.
+
 ## Not established by these publication checks
 
 - A fresh1.5B SFT run, either model's fresh150-update RL run, CUDA numerical or

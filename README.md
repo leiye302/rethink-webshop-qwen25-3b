@@ -36,9 +36,10 @@ or disable GRPO. Hint coverage and fallback reasons are logged separately.
 Two explicit environments keep the original SFT numerics and the native Ray/vLLM
 runtime separate. Python 3.10 and 3.12, Git, a CUDA 12.8-compatible NVIDIA driver,
 a CUDA toolkit for FlashAttention compilation, and Conda are prerequisites.
-Do not run these commands on occupied GPUs. SFT uses one large-memory GPU;
-native stage 2 is the pinned **two-GPU / TP2** launcher. These are not new
-single-24GB or multi-host memory-fit claims.
+Do not run these commands on occupied GPUs. Both training stages target
+**one node with 4×A100 80GB**: SFT uses four DDP ranks (2 samples/rank/update,
+global8); stage2 uses FSDP4 and **TP2×DP2** rollout. Offline evaluation uses one
+GPU. These are not single-24GB or multi-host memory-fit claims.
 
 ```bash
 git clone https://github.com/leiye302/rethink-webshop-qwen25-3b
@@ -85,7 +86,7 @@ export HINT_API_BASE="https://your-provider.example/v1"
 export HINT_MODEL="your-text-model-id"
 read -rsp 'Hint API key: ' HINT_API_KEY; echo
 export HINT_API_KEY
-CUDA_VISIBLE_DEVICES=0,1 bash scripts/train_opsd.sh --allow-api-cost
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --allow-api-cost
 ```
 
 Select a compatible text model explicitly (e.g. a MiMo endpoint); no expensive
@@ -101,7 +102,7 @@ python3.12 -m venv .venv-sft
 .venv-sft/bin/pip install -r configs/requirements-sft.txt
 python -m rethink_webshop.setup --base --accept-model-license
 .venv-sft/bin/python -m rethink_webshop.audit_data
-CUDA_VISIBLE_DEVICES=0 bash scripts/train_sft.sh
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_sft.sh
 ```
 
 The script first runs disposable numerical/memory checks, reloads the pinned base,
@@ -109,7 +110,10 @@ then trains the unchanged loss/sampler. It saves complete resumable SFT checkpoi
 at 750/1500 and evaluates validation loss, 200 empty-assistant-prefix generations
 and the fixed 128 native episodes. Resume explicitly with
 `bash scripts/train_sft.sh --resume runs/sft/checkpoint_000750` under the same
-one-GPU allocation. An optional newly trained initialization can be selected by
+four-GPU allocation. SFT resume includes the four per-rank RNG states; old
+single/two-rank optimizer checkpoints cannot resume this topology. The released
+inference weights remain valid for fresh four-GPU stage2 initialization.
+An optional newly trained initialization can be selected by
 `--actor runs/sft/checkpoint_001500/model` for stage 2.
 
 ## Matched baseline and evaluation
@@ -117,7 +121,7 @@ one-GPU allocation. An optional newly trained initialization can be selected by
 ```bash
 # Same native GRPO+OPSD beta5, from base, with NO local hint API.
 python -m rethink_webshop.setup --base --accept-model-license
-CUDA_VISIBLE_DEVICES=0,1 bash scripts/train_opsd.sh --baseline --run-dir runs/baseline
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --baseline --run-dir runs/baseline
 
 # Frozen offline greedy evaluation, no API, same 128 goals and 200 source prompts.
 CUDA_VISIBLE_DEVICES=0 bash scripts/eval.sh --model assets/base --output runs/eval_base
@@ -141,5 +145,7 @@ of the freshly generated reasoning, so they are not reported as route precision.
 CPU tests exercise the exact upstream Teacher builder, unchanged Student response
 tokens, row identity after reordering, full-vocabulary BCE/masking, frozen data,
 API failure fallback and source hashes. A clean-checkout CPU test is **not** a new
-GPU/vLLM/150-update training reproduction; see `docs/VERIFICATION.md` for the
+GPU/vLLM/150-update training reproduction. A real four-process CPU DDP test checks
+the same SFT accumulation, updates and checkpoint/resume against serial execution;
+see `docs/VERIFICATION.md` for the
 checks actually executed. No 1.5B result is inferred from the released 3B weights.

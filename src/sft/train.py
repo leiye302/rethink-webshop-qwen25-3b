@@ -21,6 +21,7 @@ import shutil
 import sys
 import time
 import uuid
+import distributed as parallel
 
 
 PARENT_REVISION = "aa8e72537993ba99e69dfaafa59ed015b17504d1"
@@ -53,11 +54,13 @@ DEFAULTS = {
     "cpu_threads": 16,
     "optimizer_backend": "native_torch_adamw_cpu_fp32_offload",
     "training_authorized": False,
+    "prepared_world_size": 4,
 }
 
 
 def emit(event, **payload):
-    print(json.dumps({"event": event, **payload}, ensure_ascii=False, allow_nan=False), flush=True)
+    if parallel.primary():
+        print(json.dumps({"event": event, **payload}, ensure_ascii=False, allow_nan=False), flush=True)
 
 
 def sha(path):
@@ -106,7 +109,7 @@ def load_config(path):
     for key in ("seed", "epochs", "total_updates", "global_batch", "micro_batch",
                 "good_per_batch", "bad_per_batch", "learning_rate", "betas",
                 "weight_decay", "adam_epsilon", "gradient_clip", "route_bce_lambda",
-                "warmup_steps", "checkpoint_steps", "evaluation_steps"):
+                "warmup_steps", "checkpoint_steps", "evaluation_steps", "prepared_world_size"):
         if cfg[key] != DEFAULTS[key]:
             raise ValueError("Frozen experiment configuration differs: " + key)
     if cfg.get("model_revision", PARENT_REVISION) != PARENT_REVISION:
@@ -249,8 +252,11 @@ def runtime_check(cfg):
     if sys.version_info[:2] != (3, 12) or torch.__version__.split("+")[0] != "2.8.0" \
             or torch.version.cuda != "12.8" or transformers.__version__ != "4.57.1":
         raise RuntimeError("Expected Python3.12/torch2.8.0/CUDA12.8/transformers4.57.1")
-    if not torch.cuda.is_available() or torch.cuda.device_count() != 1:
-        raise RuntimeError("Expose exactly one authorized idle CUDA GPU")
+    from rethink_webshop.hardware import check_cuda, validate_visible_devices
+    validate_visible_devices(os.environ.get('CUDA_VISIBLE_DEVICES'))
+    hardware=check_cuda(torch)
+    if parallel.world_size()!=cfg['prepared_world_size']:
+        raise RuntimeError('SFT DDP world size differs from the frozen hardware profile')
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError("The selected GPU does not support BF16 autocast")
     torch.set_num_threads(cfg["cpu_threads"])
@@ -259,18 +265,21 @@ def runtime_check(cfg):
     torch.backends.cudnn.benchmark = False
     transformers.logging.set_verbosity_error()
     transformers.utils.logging.disable_progress_bar()
-    p = torch.cuda.get_device_properties(0)
-    free, total = torch.cuda.mem_get_info(0)
+    p = torch.cuda.get_device_properties(torch.cuda.current_device())
+    free, total = torch.cuda.mem_get_info()
     return {"python": platform.python_version(), "torch": torch.__version__,
             "transformers": transformers.__version__, "cuda": torch.version.cuda,
             "gpu_name": p.name, "gpu_total_bytes": total, "gpu_free_before_load_bytes": free,
-            "cpu_threads": cfg["cpu_threads"], "visible_gpu_count": 1}
+            "cpu_threads": cfg["cpu_threads"], "visible_gpu_count": 4,
+            "world_size": parallel.world_size(), "devices": hardware,
+            "local_examples_per_update": cfg['global_batch']//parallel.world_size()}
 
 
 def rng_state():
     import torch
     return {"python": random.getstate(), "torch_cpu": torch.get_rng_state(),
-            "torch_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
+            "torch_cuda": [torch.cuda.get_rng_state()] if torch.cuda.is_available() else [],
+            "cuda_rng_scope": "local_device"}
 
 
 def restore_rng(state):
@@ -278,7 +287,10 @@ def restore_rng(state):
     random.setstate(state["python"])
     torch.set_rng_state(state["torch_cpu"])
     if state["torch_cuda"]:
-        torch.cuda.set_rng_state_all(state["torch_cuda"])
+        if state.get('cuda_rng_scope')=='local_device':
+            torch.cuda.set_rng_state(state['torch_cuda'][0])
+        else:
+            torch.cuda.set_rng_state_all(state["torch_cuda"])
 
 
 @contextmanager
@@ -382,7 +394,7 @@ def make_optimizer(model, cfg):
     else:
         from cpu_offload import CpuAdamWOffload
         cls = CpuAdamWOffload
-    return cls(model, lr=cfg["learning_rate"], betas=tuple(cfg["betas"]),
+    return cls(parallel.unwrap(model), lr=cfg["learning_rate"], betas=tuple(cfg["betas"]),
                weight_decay=cfg["weight_decay"])
 
 
@@ -448,7 +460,7 @@ def load_model(path, tokenizer, core):
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.train()
-    model.to("cuda:0")
+    model.to("cuda")
     if not all(p.requires_grad and p.dtype == torch.float32 for p in model.parameters()):
         raise ValueError("Every model parameter must be trainable FP32")
     return model, marker
@@ -465,18 +477,22 @@ def global_batch(model, offload, encoded, indices, core, marker, cfg, *, cuda=Tr
     offload.begin()
     losses = {"loss": 0., "suffix_ce": 0., "route_bce": 0.}
     tokens = 0
-    for index in indices:
+    local=parallel.local_indices(indices)
+    for position,index in enumerate(local):
         row = encoded[index]
-        ids = torch.tensor(row["input_ids"], dtype=torch.long, device="cuda:0" if cuda else "cpu")
-        with torch.autocast(device_type="cuda" if cuda else "cpu", dtype=torch.bfloat16, enabled=cuda):
-            output = model(input_ids=ids.unsqueeze(0), attention_mask=torch.ones_like(ids).unsqueeze(0),
-                           use_cache=False, return_dict=True)
-            terms = core.losses(output.logits[0], ids, row["suffix_start"], row["route_label"],
-                                marker, route_lambda=cfg["route_bce_lambda"])
-            scaled = terms["loss"] / len(indices)
-        if not bool(torch.isfinite(scaled)):
-            raise FloatingPointError("Nonfinite full-model loss")
-        scaled.backward()
+        ids = torch.tensor(row["input_ids"], dtype=torch.long, device="cuda" if cuda else "cpu")
+        # DDP averages rank gradients. Each of the eight original sample losses
+        # therefore contributes W/8 locally, then 1/W in DDP: exactly 1/8.
+        with parallel.accumulation_context(model,position==len(local)-1):
+            with torch.autocast(device_type="cuda" if cuda else "cpu", dtype=torch.bfloat16, enabled=cuda):
+                output = model(input_ids=ids.unsqueeze(0), attention_mask=torch.ones_like(ids).unsqueeze(0),
+                               use_cache=False, return_dict=True)
+                terms = core.losses(output.logits[0], ids, row["suffix_start"], row["route_label"],
+                                    marker, route_lambda=cfg["route_bce_lambda"])
+                scaled = terms["loss"] * (parallel.world_size()/len(indices))
+            if not bool(torch.isfinite(scaled)):
+                raise FloatingPointError("Nonfinite full-model loss")
+            scaled.backward()
         for key in losses:
             losses[key] += float(terms[key].detach()) / len(indices)
         tokens += len(row["input_ids"])
@@ -488,14 +504,23 @@ def global_batch(model, offload, encoded, indices, core, marker, cfg, *, cuda=Tr
     if cuda:
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - begin
-    result = {**losses, "seconds": elapsed, "optimizer_step_seconds": time.perf_counter() - update_begin,
+    summaries=parallel.gather(dict(losses,tokens=tokens,seconds=elapsed,
+                 optimizer_step_seconds=time.perf_counter()-update_begin))
+    losses={k:sum(x[k] for x in summaries) for k in losses}
+    result = {**losses, "seconds": max(x['seconds'] for x in summaries),
+              "optimizer_step_seconds": max(x['optimizer_step_seconds'] for x in summaries),
               "optimizer_backend": cfg.get("optimizer_backend", "native_torch_adamw_cpu_fp32_offload"),
-              "gradient_norm_before_clip": gradient_norm, "tokens": tokens,
+              "gradient_norm_before_clip": gradient_norm, "tokens": sum(x['tokens'] for x in summaries),
               "max_sequence_length": max(len(encoded[i]["input_ids"]) for i in indices),
-              "sample_count": 8, "good": 5, "bad": 3, **memory_status()}
+              "sample_count": 8, "good": 5, "bad": 3,
+              "world_size":parallel.world_size(),"local_sample_count":len(local), **memory_status()}
     if cuda:
-        result.update({"peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated(),
-                       "peak_cuda_reserved_bytes": torch.cuda.max_memory_reserved()})
+        peaks=parallel.gather({'rank':parallel.rank(),
+                 'peak_cuda_allocated_bytes':torch.cuda.max_memory_allocated(),
+                 'peak_cuda_reserved_bytes':torch.cuda.max_memory_reserved()})
+        result.update({"peak_cuda_allocated_bytes":max(x['peak_cuda_allocated_bytes'] for x in peaks),
+                       "peak_cuda_reserved_bytes":max(x['peak_cuda_reserved_bytes'] for x in peaks),
+                       "per_rank_cuda_memory":peaks})
     return result
 
 
@@ -542,7 +567,8 @@ def preflight(model, tokenizer, encoded, core, marker, cfg, identity, receipts, 
               "worst_length_batch_seconds": measurements[1]["seconds"],
               "timing_scope": "First actual sampler batch (cold Adam state initialization) plus longest 5:3 batch (warm Adam), including forward/backward and configured native AdamW update. Not an end-to-end ETA; excludes three evaluations and two checkpoints.",
               "training_rng_preserved": True, "paid_api_calls": 0}
-    atomic_json(receipts / "gpu_preflight.json", result)
+    if parallel.primary(): atomic_json(receipts / "gpu_preflight.json", result)
+    parallel.barrier()
     emit("gpu_preflight_complete", receipt=str(receipts / "gpu_preflight.json"),
          max_measured_batch_seconds=slowest, **memory_status())
     return result
@@ -573,6 +599,11 @@ def save_checkpoint(model, tokenizer, offload, scheduler, order, cfg, identity, 
     if not eligible or offload.active or offload.updates != completed:
         raise ValueError("Full immutable checkpoints are allowed only at complete steps 750 and 1500")
     target = Path(output) / f"checkpoint_{completed:06d}"
+    rank_states=parallel.gather(rng_state())
+    if not parallel.primary():
+        parallel.barrier()
+        return target
+    model=parallel.unwrap(model)
     if target.exists():
         raise FileExistsError("Immutable checkpoint already exists; refusing overwrite")
     pending = target.with_name(target.name + ".incomplete-" + uuid.uuid4().hex)
@@ -597,9 +628,11 @@ def save_checkpoint(model, tokenizer, offload, scheduler, order, cfg, identity, 
                     "scheduler": scheduler.state_dict(), "rng": state, "offload_updates": offload.updates,
                     "parameter_names": [name for name, _ in offload.named],
                     "identity_sha256": digest(identity), "order_sha256": digest(order),
-                    "runtime_deadline_policy": policy()},
+                    "runtime_deadline_policy": policy(),
+                    "world_size":parallel.world_size(),"rank_rng_states":rank_states},
                    pending / "training_state.pt")
         manifest = {"schema": "webshop-immutable-full-checkpoint-v1", "complete": True,
+                    "world_size":parallel.world_size(),
                     "checkpoint_reason": "shutdown_deadline" if emergency else "scheduled",
                     "completed_updates": completed, "next_batch": completed,
                     "next_batch_audit_ids": [identity["train_audit_ids"][i] for i in order[completed]]
@@ -609,6 +642,7 @@ def save_checkpoint(model, tokenizer, offload, scheduler, order, cfg, identity, 
         # one rename. Failed/incomplete directories are retained for inspection.
         atomic_json(pending / "manifest.json", manifest)
         os.rename(pending, target)
+    parallel.barrier()
     return target
 
 
@@ -617,6 +651,8 @@ def verify_checkpoint(path, identity, order):
     if ".incomplete-" in path.name:
         raise ValueError("Cannot resume an unpublished checkpoint")
     manifest = read_json(path / "manifest.json")
+    if manifest.get('world_size')!=identity['config']['prepared_world_size']:
+        raise ValueError('SFT checkpoint world size differs; no cross-topology optimizer resume')
     completed = manifest.get("completed_updates")
     eligible = completed in (750, 1500) or (manifest.get("checkpoint_reason") == "shutdown_deadline"
                                            and isinstance(completed,int) and 0 < completed < 1500)
@@ -644,11 +680,25 @@ def restore_checkpoint(path, offload, scheduler, identity, order):
     offload.optimizer.load_state_dict(state["optimizer"])
     scheduler.load_state_dict(state["scheduler"])
     offload.updates = completed
-    restore_rng(state["rng"])
+    if state.get('world_size')!=parallel.world_size() or len(state.get('rank_rng_states',[]))!=parallel.world_size():
+        raise ValueError('Checkpoint rank RNG map is not this distributed topology')
+    restore_rng(state['rank_rng_states'][parallel.rank()])
     return completed
 
 
 def run_evaluation(model, tokenizer, rows, valenc, marker, cfg, step, output):
+    # Run the unchanged complete native evaluation once, not four copies. The
+    # other ranks wait without DDP forwards; all training RNG states are retained.
+    parallel.barrier()
+    elapsed=None
+    if parallel.primary():
+        elapsed=serial_evaluation(parallel.unwrap(model),tokenizer,rows,valenc,marker,cfg,step,output)
+    elapsed=parallel.broadcast(elapsed)
+    parallel.barrier()
+    return elapsed
+
+
+def serial_evaluation(model, tokenizer, rows, valenc, marker, cfg, step, output):
     from evaluation import run_suite
     from deadline_policy import evaluation_cutoff
     evaluation_cfg = dict(cfg, _evaluation_deadline_epoch=evaluation_cutoff(step, cfg["total_updates"]))
@@ -688,12 +738,13 @@ def train(model, tokenizer, core, marker, trainenc, val, valenc, order, cfg, ide
     # trajectory, never append ambiguous duplicate step numbers to its history.
     history = Path(output) / (f"training_resume_from_{start:06d}_{uuid.uuid4().hex}.jsonl"
                               if resume else "training.jsonl")
-    if not resume and history.exists():
+    if not resume and parallel.primary() and history.exists():
         raise FileExistsError("Run already has training history; supply an exact checkpoint to resume")
     started = time.perf_counter()
     from deadline_policy import stop_epoch, policy
     completed = start
-    atomic_json(Path(output) / "runtime_deadline_policy.json", policy())
+    if parallel.primary(): atomic_json(Path(output) / "runtime_deadline_policy.json", policy())
+    parallel.barrier()
     try:
         if resume:
             emit("exact_checkpoint_resumed", completed_updates=start, history=str(history))
@@ -705,7 +756,7 @@ def train(model, tokenizer, core, marker, trainenc, val, valenc, order, cfg, ide
             run_evaluation(model, tokenizer, val, valenc, marker, cfg, start, output)
         for index in range(start, len(order)):
             deadline = stop_epoch()
-            if deadline is not None and time.time() >= deadline:
+            if parallel.broadcast(deadline is not None and time.time() >= deadline):
                 offload.release_gradients()
                 checkpoint = None
                 if completed > 0:
@@ -716,9 +767,10 @@ def train(model, tokenizer, core, marker, trainenc, val, valenc, order, cfg, ide
                     else:
                         checkpoint = save_checkpoint(model,tokenizer,offload,scheduler,order,cfg,
                             identity,completed,output,root,emergency=True)
-                atomic_json(Path(output) / "training_stopped_before_shutdown.json",
-                    {"completed_updates":completed,"training_complete":False,
-                     "checkpoint":str(checkpoint) if checkpoint else None,"runtime_deadline_policy":policy()})
+                if parallel.primary():
+                    atomic_json(Path(output) / "training_stopped_before_shutdown.json",
+                        {"completed_updates":completed,"training_complete":False,
+                         "checkpoint":str(checkpoint) if checkpoint else None,"runtime_deadline_policy":policy()})
                 emit("shutdown_checkpoint_secured",completed_updates=completed,
                      checkpoint=str(checkpoint) if checkpoint else None)
                 return
@@ -727,10 +779,11 @@ def train(model, tokenizer, core, marker, trainenc, val, valenc, order, cfg, ide
             scheduler.step()
             completed = index + 1
             payload = {"step": completed, "lr_used": lr, "next_lr": offload.optimizer.param_groups[0]["lr"], **result}
-            with history.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(payload, ensure_ascii=False, allow_nan=False) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            if parallel.primary():
+                with history.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(payload, ensure_ascii=False, allow_nan=False) + "\n")
+                    f.flush()
+                    os.fsync(f.fileno())
             emit("training_update", **payload)
             if completed in cfg["checkpoint_steps"]:
                 offload.release_gradients()
@@ -740,7 +793,7 @@ def train(model, tokenizer, core, marker, trainenc, val, valenc, order, cfg, ide
                 emit("checkpoint_published", step=completed, path=str(path),
                      seconds=time.perf_counter() - checkpoint_begin)
                 run_evaluation(model, tokenizer, val, valenc, marker, cfg, completed, output)
-        atomic_json(Path(output) / "training_complete.json", {"complete": True,
+        if parallel.primary(): atomic_json(Path(output) / "training_complete.json", {"complete": True,
             "completed_updates": 1500, "identity_sha256": digest(identity),
             "elapsed_this_invocation_seconds": time.perf_counter() - started,
             "checkpoint_steps": cfg["checkpoint_steps"], "evaluation_steps": cfg["evaluation_steps"],
@@ -765,6 +818,7 @@ def main(argv=None):
     if str(root) != EXPECTED_ROOT:
         raise ValueError("This launcher is scoped to the explicitly approved remote project root")
     cfg = load_config(args.config)
+    parallel.initialize(cfg['prepared_world_size'])
     if args.resume_checkpoint and not args.train:
         raise ValueError("Resume is a formal-training operation, not a disposable preflight")
     if args.train and (cfg.get("training_authorized") is not True or os.environ.get("ALLOW_WEBSHOP_ROUTE_SFT") != "1"):
@@ -772,7 +826,7 @@ def main(argv=None):
     runtime = runtime_check(cfg)
     emit("runtime_verified", **runtime)
     core, reference_identity = verify_reference(root, cfg)
-    parent_identity = verify_parent(root, cfg)
+    parent_identity = parallel.broadcast(verify_parent(root,cfg) if parallel.primary() else None)
     rows, val, order, data_identity = validate_dataset(root, cfg, core)
     identity = {"schema": "webshop-sft-exact-identity-v1", "config": cfg,
                 "config_sha256": digest(cfg), "reference": reference_identity,
@@ -799,7 +853,7 @@ def main(argv=None):
                          "max_train_length": max(len(r["input_ids"]) for r in trainenc),
                          "max_validation_length": max(len(r["input_ids"]) for r in valenc)}
     if args.gpu_preflight_only:
-        atomic_json(receipts / "tokenizer_preflight.json", tokenizer_receipt)
+        if parallel.primary(): atomic_json(receipts / "tokenizer_preflight.json", tokenizer_receipt)
     emit("all_rows_tokenizer_preflight", **tokenizer_receipt)
     seed_all(cfg["seed"])
     if args.gpu_preflight_only:
@@ -807,12 +861,14 @@ def main(argv=None):
         # this process's Python/CPU/CUDA RNG states as they found them.
         with preserve_rng():
             resident = cfg["optimizer_backend"] == "native_torch_adamw_cuda_fp32"
-            numerical = verify_resident_numerics("cuda:0") if resident else verify_offload_numerics("cuda:0")
+            device='cuda:'+str(__import__('torch').cuda.current_device())
+            numerical = verify_resident_numerics(device) if resident else verify_offload_numerics(device)
             numerical_name = "optimizer_numerics.json" if resident else "offload_numerics.json"
-            atomic_json(receipts / numerical_name, {**numerical,
+            if parallel.primary(): atomic_json(receipts / numerical_name, {**numerical,
                         "identity_sha256": digest(identity)})
             emit("synthetic_optimizer_numerics", **numerical)
             model, marker = load_model(model_path, tokenizer, core)
+            model=parallel.wrap(model)
             try:
                 preflight(model, tokenizer, trainenc, core, marker["token_id"], cfg,
                           identity, receipts, runtime, order)
@@ -823,6 +879,7 @@ def main(argv=None):
                 torch.cuda.empty_cache()
         return 0
     model, marker = load_model(model_path, tokenizer, core)
+    model=parallel.wrap(model)
     train(model, tokenizer, core, marker["token_id"], trainenc, val, valenc, order,
           eval_cfg, identity, output, root, resume=resume)
     return 0
@@ -834,3 +891,5 @@ if __name__ == "__main__":
     except Exception as exc:
         emit("failed", error_type=type(exc).__name__, message=str(exc), formal_training_completed=False)
         raise
+    finally:
+        if parallel.dist.is_initialized(): parallel.dist.destroy_process_group()

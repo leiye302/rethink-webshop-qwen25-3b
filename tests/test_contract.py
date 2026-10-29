@@ -53,6 +53,12 @@ def test_recipes():
     assert cfg['trainer.total_training_steps']==150
     assert cfg['trainer.test_freq']==10 and cfg['trainer.save_freq']==20
     assert cfg['trainer.max_actor_ckpt_to_keep']==2
+    assert sft['prepared_world_size']==4
+    assert cfg['trainer.n_gpus_per_node']==4 and cfg['trainer.nnodes']==1
+    assert cfg['actor_rollout_ref.rollout.tensor_model_parallel_size']==2
+    assert cfg['actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu']*4==16
+    assert cfg['actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu']*4==32
+    assert cfg['actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu']*4==32
 
 
 def test_native_fixed_validation():
@@ -119,7 +125,20 @@ def test_resume_never_silently_restarts_from_scratch(tmp_path):
     checkpoint=folder/'global_step_20'
     (checkpoint/'actor').mkdir(parents=True)
     (checkpoint/'data.pt').write_bytes(b'fixture')
+    for rank in range(4):
+        for kind in ['model','optim','extra_state']:
+            (checkpoint/'actor'/f'{kind}_world_size_4_rank_{rank}.pt').write_bytes(b'fixture')
+    assert resume_checkpoint(tmp_path)==checkpoint
+
+
+def test_old_two_rank_resume_is_rejected(tmp_path):
+    from rethink_webshop.run import resume_checkpoint
+    folder=tmp_path/'checkpoints'
+    checkpoint=folder/'global_step_20'
+    (checkpoint/'actor').mkdir(parents=True)
+    (folder/'latest_checkpointed_iteration.txt').write_text('20')
+    (checkpoint/'data.pt').write_bytes(b'fixture')
     for rank in range(2):
         for kind in ['model','optim','extra_state']:
             (checkpoint/'actor'/f'{kind}_world_size_2_rank_{rank}.pt').write_bytes(b'fixture')
-    assert resume_checkpoint(tmp_path)==checkpoint
+    with pytest.raises(ValueError): resume_checkpoint(tmp_path)

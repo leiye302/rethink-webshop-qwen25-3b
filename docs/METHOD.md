@@ -57,8 +57,15 @@ source row fields are included unchanged in the ZIP: hashes are in
 The ZIP contains no server paths, API credentials, private logs or optimizer states.
 
 The original task/route-balanced sampler (`src/sft_reference`) visits every row
-once, uses seed=0, and forms 1500 batches of 5 Good/3 Bad. A single GPU accumulates
-eight micro-batch-1 samples. Full trainable FP32 parameters, BF16 autocast,
+once, uses seed=0, and forms 1500 batches of 5 Good/3 Bad. Four DDP ranks take
+two micro-batch-1 samples each from the SAME original global batch; no per-rank
+Good/Bad quota, cycling or new shuffle is introduced. Each local loss is scaled
+by4/8 before DDP's rank-average, giving the same eight-sample mean gradient:
+
+$$\frac{1}{4}\sum_{r=0}^{3}\sum_{i\in B_r}\frac{4}{8}\nabla L_i
+=\frac{1}{8}\sum_{i\in B}\nabla L_i.$$
+
+Full trainable FP32 parameters, BF16 autocast,
 non-reentrant checkpointing, native AdamW with LR 2e-6, betas (0.9,0.95), weight
 decay .01, epsilon 1e-8, gradient clip 1, warmup150 and cosine schedule1500 are
 preserved. Maximum sequence length8192; overlength is an error, never truncation.
@@ -118,10 +125,18 @@ The native separate reference-policy KL (.01, low_var_kl) remains enabled in
 stage 2; it is distinct from the absent SFT reference KL.
 
 Batch16 tasks × group8 =128 rollout episodes/update; native max15 steps,
-history2, prompt4096/response512, Actor LR1e-6, PPO minibatch64/micro8 per GPU,
+history2, prompt4096/response512, Actor LR1e-6, PPO minibatch64/micro4 per GPU,
 native invalid-action penalty .1, native entropy coefficient and GRPO advantage
 normalization unchanged. The public GRPO+OPSD launcher uses beta0; **beta5 is
 the explicit requested change**, shared with the provided baseline.
+
+The four-A100 profile uses native FSDP world4 and rollout TP2×DP2. PPO mini-batch
+stays64; per-GPU Actor micro-batch8→4, rollout/reference logprob micro-batches
+16→8 preserve their global sizes16/32/32. Native `adjust_batch` still rounds to
+multiples of32 decisions, rather than adding more duplicate rows at world4.
+Both comparison arms use the same changes. Different collective reduction order
+and rollout worker assignment can change rounding/sampled trajectories; this is
+not a claim of bitwise-identical two-versus-four-GPU runs.
 
 Local hints never reach Student generation, Student forward, reference forward
 or evaluation. Metadata is attached before flattening, then follows native

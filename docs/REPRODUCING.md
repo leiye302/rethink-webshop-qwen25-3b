@@ -46,23 +46,40 @@ format; retention is latest2, not unlimited. Do not delete the only verified
 resume state before a newer complete native checkpoint exists. Environment/CUDA
 packages and caches require additional space; disk checks belong before launch.
 
-The native launcher expects2 visible GPUs/TP2, not a new1-GPU adaptation.
-The fresh3B/1.5B stage2 configuration has not been claimed GPU memory-tested by
-CPU publication checks. If hardware requires a compatibility change, apply it
-identically to both comparison arms and disclose it; do not silently modify loss,
-rollout grouping, prompt/response budgets or training steps.
+Both training launchers now require4 explicitly assigned **A100 80GB** devices
+on one node (at least75GiB visible VRAM each;40GB/MIG slices are rejected).
+SFT uses DDP4, two micro-batch1 rows/rank/update and the same global8-row5:3 order.
+Stage2 uses FSDP4 and TP2×DP2 rollout; PPO mini-batch64 and global Actor/rollout/
+reference micro-batches16/32/32 are preserved by halving per-GPU micro-batches.
+Native decision padding still uses32. Four GPUs do not increase16×8 episodes.
+Baseline/method and both sizes share these hardware settings.
+
+The128 train plus128 validation native environment actors reserve25.6 logical
+Ray CPUs at0.1 each, before model workers/driver. Provide at least32 schedulable
+CPUs and plan256–512GiB host RAM (prefer512GiB); actors load native product,
+NLP and Java state. These are capacity recommendations, not measured minima.
+SFT also replicates FP32 parameters/AdamW and can load4 CPU optimizer copies
+during resume; host RAM matters as well as VRAM.
+
+Four-A100 CUDA/NCCL/vLLM memory fit and throughput remain unverified without the
+actual cards. The four-process CPU Gloo test checks the production partition,
+loss scaling, updates and checkpoint/RNG resume, not BF16/NCCL bitwise parity.
+Run the disposable four-GPU SFT preflight before training. Offline evaluation
+still uses one GPU to preserve the fixed greedy protocol; other SFT ranks wait
+at the boundary instead of writing duplicate evaluation evidence.
 
 ## SFT exact resume
 
 The trainer first hashes base/data/code, checks both tokenizer boundaries and
 the5:3 no-repeat order, checks numerical AdamW parity, then executes2 disposable
-real-model updates including a long balanced batch. Formal training reloads the
+real-model distributed updates including a long balanced batch. Formal training reloads the
 base afterward; those2 updates do not contaminate initialization. Preflight and
 training must use identical code/config/data/parent files.
 
-SFT750/1500 checkpoints contain model/tokenizer, optimizer, scheduler, RNG, batch
+SFT750/1500 checkpoints contain model/tokenizer, optimizer, scheduler, four rank
+RNG states, world-size binding, batch
 order, immutable identity and SHA manifest. Pending directories are not resumes.
-Only exact matching complete checkpoints may resume. `--resume` never restarts
+Only exact matching complete4-rank checkpoints may resume. `--resume` never restarts
 from base silently. SFT inference-only release cannot resume an optimizer.
 
 An optional shutdown guard uses `WEBSHOP_SAVE_BY_ISO` with explicit timezone;
@@ -74,7 +91,10 @@ failed/pending runs are not reported as finished.
 
 Native SDAR owns FSDP saving/resume, rewards, all GRPO updates and native gate.
 Run `train_opsd.sh --resume --allow-api-cost` against the same directory only.
-The wrapper rejects a different Actor/config/validation identity. Its default
+The wrapper rejects a different Actor/config/validation/world-size identity and
+requires all4 native model/optimizer/extra-state rank shards plus dataloader state.
+Old single/two-rank optimizer states cannot resume this topology; inference-only
+model exports remain valid fresh initialization weights. Its default
 initialization is not “latest weights from another run.” Native latest2 retention
 keeps final150 as one of the latest2. No cross-server backup agent is required.
 

@@ -12,6 +12,7 @@
   "epochs": 1,
   "total_updates": 1500,
   "global_batch": 8,
+  "prepared_world_size": 4,
   "micro_batch": 1,
   "good_per_batch": 5,
   "bad_per_batch": 3,
@@ -34,7 +35,7 @@
     750,
     1500
   ],
-  "cpu_threads": 16,
+  "cpu_threads": 4,
   "generation_max_new_tokens": 512,
   "generation_batch_size": 8,
   "generation_temperature": 0.0,
