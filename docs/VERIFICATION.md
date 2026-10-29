@@ -12,8 +12,10 @@
 - Linux CPU execution on independently exported source trees: **21 tests passed
   for each model-size repository**, including the exact unmodified upstream
   Teacher batch builder executed with a CPU-only RPC double.
-- The subsequently added native-resume-file guard was tested locally. The full
-  current test suite has22 tests; clean-checkout GitHub CI runs it with CPU torch.
+- The full current22-test suite, including the native-resume-file guard, passed
+  in **clean-checkout GitHub-hosted Ubuntu CPU CI for both repositories**.
+  CI installs CPU torch, fetches the public SDAR pin from GitHub, extracts the
+  bundled data, checks source locks, executes the tests and scans Git history.
 - Tests cover full-vocabulary BCE/target shift/masking, no-repeat5:3 sampler,
   data identities/task split, Good original actions, valid marker-ID capture,
   row permutation/duplication, current-Actor scoring interface, unchanged Student
