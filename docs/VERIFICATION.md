@@ -12,7 +12,7 @@
 - Linux CPU execution on independently exported source trees: **21 tests passed
   for each model-size repository**, including the exact unmodified upstream
   Teacher batch builder executed with a CPU-only RPC double.
-- The full current22-test suite, including the native-resume-file guard, passed
+- The original22-test suite, including the native-resume-file guard, passed
   in **clean-checkout GitHub-hosted Ubuntu CPU CI for both repositories**.
   CI installs CPU torch, fetches the public SDAR pin from GitHub, extracts the
   bundled data, checks source locks, executes the tests and scans Git history.
@@ -36,8 +36,12 @@ global-microbatch/padding equivalence, rejection of old two-rank resumes, and
 a real4-process CPU Gloo test using the production SFT update/checkpoint code.
 That test compares three sample-mean CE+BCE/AdamW updates against serial8-row
 execution, with a complete four-rank RNG/optimizer/scheduler checkpoint/resume
-between updates2 and3. See CI for the current commit's result; this is not a
-CUDA/NCCL/A100 memory or throughput test.
+between updates2 and3. **All28 tests passed with no skips in clean Ubuntu CPU CI
+for both variants**, including the actual four-process Gloo test:
+[3B](https://github.com/leiye302/rethink-webshop-qwen25-3b/actions/runs/40848789893),
+[1.5B](https://github.com/leiye302/rethink-webshop-qwen25-1.5b/actions/runs/40848785475).
+This is not a CUDA/NCCL/A100 memory or throughput test. The raw3B SFT1500 weights
+and frozen datasets are unchanged by the hardware adaptation.
 
 ## Not established by these publication checks
 
