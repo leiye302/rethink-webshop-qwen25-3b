@@ -1,5 +1,31 @@
 # Publication verification
 
+The historical CPU/CI checks below refer to their stated pre-alignment release.
+For the final-ALFWorld GLM protocol alignment, install/runtime corrections and
+the boundary of new single-GPU fixtures, see `ALFWORLD_ALIGNMENT.md`.
+Do not treat the historical CI links as a new four-GPU execution of changed code.
+
+## Final-ALFWorld alignment checks
+
+- Both model-size source trees passed all **39 Linux CPU tests**, including
+  four-process Gloo SFT update/checkpoint-resume parity, the exact upstream
+  Teacher builder, generated-token route capture, and final GLM request/parser
+  and transport-hold contracts. Public CI reruns these checks on each commit.
+- The two hint protocol sources are byte-identical to the final ALFWorld
+  implementation and are checked against `configs/hint_protocol.json`.
+  SFT loss/sampling, native GRPO/OPSD loss and the Teacher builder are unchanged.
+- All 12,000 training rows, 902 validation rows and 200 generation-diagnostic
+  rows passed the released 3B tokenizer boundary scan, with zero boundary
+  mismatches or encoding errors and no training/validation task overlap.
+  This is a 3B tokenizer check, not a 1.5B forward or training result.
+- Separate 1.5B single-GPU diagnostic fixtures exercised a full-parameter
+  SFT update/save/reload, native GRPO+OPSD backward with recorded responses and
+  fixture rewards, a real GLM Teacher-hint scoring request, and vLLM generation.
+  Native WebShop reset/search/feedback and runtime `pip check` also passed.
+  These are diagnostic checks, not an on-policy training run or benchmark score.
+- Complete 3B GPU forward/backward and four-A100 FSDP/TP2xDP2 execution remain
+  unverified. Do not substitute the 1.5B diagnostics for those missing checks.
+
 ## Executed without GPU or paid hint requests
 
 - Source/data allowlist, syntax and current/history privacy scans passed.
@@ -19,8 +45,9 @@
 - Tests cover full-vocabulary BCE/target shift/masking, no-repeat5:3 sampler,
   data identities/task split, Good original actions, valid marker-ID capture,
   row permutation/duplication, current-Actor scoring interface, unchanged Student
-  responses/inputs, per-row Teacher budget fallback, partial hint validation,
-  bounded timeout/auth fallback and missing native-resume files.
+  responses/inputs, Teacher budget checking, hint validation,
+  timeout/auth handling and missing native-resume files. The final alignment
+  now uses explicit API holds and rejects silently truncated Teacher hints.
 - All21 released3B assets were uploaded, byte-count/SHA256 matched against the
   exact original1500-step export and independently matched to GitHub's asset
   digests before the release was made public.

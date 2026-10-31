@@ -15,7 +15,8 @@
   `configs/checkpoint1500.json`. Original7 FP32 shards, no quantization/dtype
   conversion. No resharding is needed for inference initialization.
 - External hint API is optional only for baseline/evaluation; method training
-  needs an explicitly chosen compatible provider/model/key and cost consent.
+  needs a compatible provider/key and cost consent; model is fixed to
+  `glm-5.3-flash` by the final ALFWorld recipe.
   No private account, API balance or third-party service uptime is bundled.
 
 New code is Apache2.0; model/data/SDAR upstream licenses remain separate.
@@ -106,9 +107,10 @@ may remove the remaining private file. Never publish `runs/`, `.env` or API logs
 Transport uses bounded HTTP/1.1 requests and controlled error codes; HTTP bodies
 and secret-bearing exception strings are not printed.
 
-One failed hint must not stop training: unavailable credit/auth, transport, empty
-content, missing/duplicate step IDs, illegal next commands, or prompt overflow
-produce ordinary static-skill Teacher fallback and coverage counters. A high
+The final ALFWorld protocol distinguishes failures: unavailable credit/auth or
+transport errors retain the same batch and wait; invalid returned content,
+missing/duplicate step IDs or illegal commands use static-skill Teacher fallback.
+A local hint cut by the native prompt budget fails visibly. A high
 fallback rate means the **local-hint intervention is poorly applied**, not a
 successful hint-quality result; report coverage and investigate separately.
 Syntactic legality is not proof of semantically helpful hints.

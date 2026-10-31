@@ -27,9 +27,11 @@ preinstalled environments. Model weights are separate downloadable assets.
 | RL checkpoints | Every 20 updates and final 150; latest two complete native checkpoints |
 
 No API judges the routes. Student inputs never contain hints or retrospective
-labels. API failures, malformed hints, illegal suggestions or Teacher-context
-overflow fall back to the ordinary static-skill Teacher; they do not wait forever
-or disable GRPO. Hint coverage and fallback reasons are logged separately.
+labels. The final ALFWorld hint model and exact protocol are pinned to
+`glm-5.3-flash`; malformed/illegal hints fall back to static-skill Teacher.
+Transport/auth/quota failures retain the same batch and wait, rather than
+silently dropping hints. Teacher-hint truncation fails visibly. See
+[the exact alignment and runtime corrections](docs/ALFWORLD_ALIGNMENT.md).
 
 ## Installation (Linux x86-64)
 
@@ -46,14 +48,14 @@ git clone https://github.com/leiye302/rethink-webshop-qwen25-3b
 cd rethink-webshop-qwen25-3b
 conda create -y -p "$PWD/.venv-opsd" -c conda-forge python=3.10 openjdk=11
 conda activate "$PWD/.venv-opsd"
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -r configs/requirements-opsd.txt
+python -m pip install --upgrade pip setuptools wheel packaging==25.0
+python scripts/install_opsd.py
 python -m pip install --no-build-isolation flash-attn==2.8.3
 mkdir -p assets
 export PYTHONPATH="$PWD/src:$PWD/.deps/sdar"
 python -m rethink_webshop.java --prepare
 python -m rethink_webshop.setup --framework --data
-python -m pip install -e .deps/sdar -c configs/requirements-opsd.txt
+python -m pip install --no-deps -e .deps/sdar
 python -m pip check
 export JAVA_HOME="$PWD/assets/java"
 export JVM_PATH="$JAVA_HOME/lib/server/libjvm.so"
@@ -83,14 +85,15 @@ before downloading the 3B weights; they are **not Apache-2.0 model weights**.
 ```bash
 python -m rethink_webshop.setup --checkpoint1500 --accept-model-license
 export HINT_API_BASE="https://your-provider.example/v1"
-export HINT_MODEL="your-text-model-id"
+export HINT_MODEL="glm-5.3-flash"
 read -rsp 'Hint API key: ' HINT_API_KEY; echo
 export HINT_API_KEY
 CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --allow-api-cost
 ```
 
-Select a compatible text model explicitly (e.g. a MiMo endpoint); no expensive
-model is silently selected and no API credits are included. Use a process manager
+Use a compatible provider serving the fixed `glm-5.3-flash` model and final
+ALFWorld request parameters; do not substitute the annotation model.
+No key or API credits are included. Use a process manager
 you control for an unattended job. To resume the latest native checkpoint of the
 same run, add `--resume`; never change the initialization/data/recipe in place.
 
@@ -144,7 +147,7 @@ of the freshly generated reasoning, so they are not reported as route precision.
 
 CPU tests exercise the exact upstream Teacher builder, unchanged Student response
 tokens, row identity after reordering, full-vocabulary BCE/masking, frozen data,
-API failure fallback and source hashes. A clean-checkout CPU test is **not** a new
+API hold/fallback boundaries and source hashes. A clean-checkout CPU test is **not** a new
 GPU/vLLM/150-update training reproduction. A real four-process CPU DDP test checks
 the same SFT accumulation, updates and checkpoint/resume against serial execution;
 see `docs/VERIFICATION.md` for the

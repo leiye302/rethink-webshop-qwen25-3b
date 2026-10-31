@@ -8,7 +8,8 @@ import pytest
 from rethink_webshop.common import UPSTREAM
 
 
-def test_teacher_keeps_responses_and_nontriggered_native_context(tmp_path,monkeypatch):
+@pytest.mark.parametrize('oversize',[False,True])
+def test_teacher_keeps_responses_and_nontriggered_native_context(tmp_path,monkeypatch,oversize):
     torch=pytest.importorskip('torch')
     np=pytest.importorskip('numpy')
     if not UPSTREAM.exists():
@@ -40,7 +41,7 @@ def test_teacher_keeps_responses_and_nontriggered_native_context(tmp_path,monkey
     monkeypatch.setitem(sys.modules,'verl',types.SimpleNamespace(DataProto=Batch))
     monkeypatch.setitem(sys.modules,'verl.trainer.ppo.rlsd_ray_trainer',types.SimpleNamespace(build_teacher_batch=builder))
     from rethink_webshop import hints
-    monkeypatch.setattr(hints,'collect_hints',lambda *a,**kw:([None,'local only', 'x'*2000],['not_triggered','applied','applied']))
+    monkeypatch.setattr(hints,'collect_hints',lambda *a,**kw:([None,'local only', 'x'*2000 if oversize else None],['not_triggered','applied','applied' if oversize else 'not_triggered']))
     response=torch.tensor([[3,4,5],[6,7,8],[9,10,11]])
     prompts=torch.tensor([tok.encode('visible H')]*3)
     full=torch.cat([prompts,response],dim=1)
@@ -59,6 +60,10 @@ def test_teacher_keeps_responses_and_nontriggered_native_context(tmp_path,monkey
     trainer=types.SimpleNamespace(config=types.SimpleNamespace(algorithm=types.SimpleNamespace(
          local_hints=Options(audit_dir=str(tmp_path))),data=Options(max_prompt_length=256,truncation='error')),
          skill_provider=Provider(),tokenizer=tok,actor_rollout_wg=rpc,global_steps=1)
+    if oversize:
+        with pytest.raises(RuntimeError,match='budget truncates'):
+            hints.score_teacher(trainer,student)
+        return
     assert torch.equal(hints.score_teacher(trainer,student),torch.full((3,3),5.))
     assert torch.equal(rpc.received.batch['input_ids'][0],native.batch['input_ids'][0])
     assert torch.equal(rpc.received.batch['input_ids'][2],native.batch['input_ids'][2])
@@ -67,7 +72,7 @@ def test_teacher_keeps_responses_and_nontriggered_native_context(tmp_path,monkey
     for k in student.batch:
         assert torch.equal(student.batch[k],before[k]),k
     report=json.loads((tmp_path/'update_000001.json').read_text())
-    assert report['applied']==1 and report['fallback_reasons']['teacher_prompt_budget']==1
+    assert report['applied']==1 and 'teacher_prompt_budget' not in report['fallback_reasons']
     rpc.version=6
     assert torch.equal(hints.score_teacher(trainer,student),torch.full((3,3),6.))
 
@@ -78,17 +83,44 @@ def test_capture_routes_by_valid_generated_ids_and_keeps_preaction_state():
     class Tokenizer:
         def get_vocab(self): return {'<RETHINK>':7}
         def encode(self,*a,**kw): return [7]
+        def decode(self,ids,**kw):
+            return '<think>R</think>'+('<RETHINK>' if 7 in ids else '')+'<action>A</action>'
     batch=types.SimpleNamespace(batch={'responses':torch.tensor([[7,1,0],[1,7,0],[7,1,0]]),
              'attention_mask':torch.tensor([[1,1,0],[1,0,0],[1,1,0]])})
     records=[[],[],[]]
     capture(records,Tokenizer(),batch,{'text':['before0','before1','before2']},
-        [{'clickables':['before button']}]*3,['<think>R</think><RETHINK><action>A</action>']*3,
+        [{'clickables':['before button']}]*3,['A']*3,
         {'text':['after0','after1','after2']},[0,0,0],[False]*3,[True,True,False],0)
     assert records[0][0]['triggered'] and not records[1][0]['triggered']
     assert not records[2]
     assert records[0][0]['visible_prompt']=='before0'
+    assert records[0][0]['reasoning']=='R'
+    assert records[0][0]['action']=='A'
     assert records[0][0]['feedback']=='after0'
     rows=[[{}],[{}],[{}]]
     attach(records,rows)
     assert rows[0][0]['rethink_triggered'] is True
     assert rows[1][0]['rethink_triggered'] is False
+
+
+@pytest.mark.parametrize('response,expected',[
+    ('<think> '+chr(10)+'R'+chr(10)+' </think><RETHINK><action>A</action>','R'),
+    ('<RETHINK><action>A</action>','<RETHINK><action>A</action>')])
+def test_capture_reasoning_fallback_matches_alfworld_final(response,expected):
+    torch=pytest.importorskip('torch')
+    from rethink_webshop.hints import capture
+    class Tokenizer:
+        def get_vocab(self):return {'<RETHINK>':7}
+        def encode(self,*a,**kw):return [7]
+        def decode(self,*a,**kw):return response
+    batch=types.SimpleNamespace(batch={'responses':torch.tensor([[7,1]]),
+        'attention_mask':torch.tensor([[1,1]])})
+    records=[[]]
+    capture(records,Tokenizer(),batch,{'text':['visible H'],'anchor':['raw page']},
+            [{'has_search_bar':False,'clickables':['A']}],['A'],
+            {'text':['next H'],'anchor':['raw feedback']},[0],[False],[True],0)
+    assert records[0][0]['reasoning']==expected
+    assert records[0][0]['actor_response']==response
+    assert records[0][0]['observation']=='raw page'
+    assert records[0][0]['action']=='A' and records[0][0]['feedback']=='raw feedback'
+    assert records[0][0]['triggered']

@@ -43,6 +43,20 @@ def resolved(actor,output,baseline=False):
     return cfg
 
 
+def complete_weight_files(path):
+    weights=sorted(Path(path).glob('*.safetensors'))
+    if not weights or any(not p.stat().st_size for p in weights):
+        raise ValueError('Complete local safetensors weights are required')
+    index=Path(path)/'model.safetensors.index.json'
+    if index.is_file():
+        required=set(json.loads(index.read_text())['weight_map'].values())
+        if required!={p.name for p in weights}:
+            raise ValueError('Incomplete/extra model shards: finish and verify the full download before training')
+    elif len(weights)!=1 or weights[0].name!='model.safetensors':
+        raise ValueError('Sharded model requires its complete weight index before training')
+    return weights
+
+
 def validate_actor(path,baseline):
     from transformers import AutoConfig,AutoTokenizer
     profile=load('model.json')
@@ -55,9 +69,7 @@ def validate_actor(path,baseline):
         token=tok.get_vocab().get('<RETHINK>')
         if token is None or tok.encode('<RETHINK>',add_special_tokens=False)!=[token] or token>=config.vocab_size:
             raise ValueError('Registered Actor marker is missing or out of model vocabulary')
-    weights=sorted(Path(path).glob('*.safetensors'))
-    if not weights:
-        raise ValueError('Complete local safetensors weights are required')
+    weights=complete_weight_files(path)
     files={p.name:sha(p) for p in weights}
     return {'model_config_sha256':sha(Path(path)/'config.json'),'weight_sha256':files,
             'tokenizer_sha256':sha(Path(path)/'tokenizer.json'),
@@ -115,6 +127,8 @@ def main():
     if receipt.exists() and not a.resume:
         raise FileExistsError('This run already exists; explicitly --resume it or use a new run directory')
     identity.update({'recipe_sha256':sha(ROOT/'configs/opsd.json'),'upstream_sha256':sha(ROOT/'configs/upstream.json'),
+                     'hint_contract_sha256':{name:sha(ROOT/'src/rethink_webshop'/name)
+                         for name in ['hint_api.py','hints.py','rethink_api_protocol.py','rethink_benchmark_contract.py']},
                      'actor':str(actor.relative_to(ROOT)),'validation_sha256':sha(ROOT/'configs/eval128.json'),
                      'world_size':WORLD_SIZE,'rollout_tensor_parallel':2})
     if a.resume and (not receipt.exists() or json.loads(receipt.read_text())!=identity):
@@ -125,6 +139,9 @@ def main():
             p.error('Method uses an external API: --allow-api-cost is required')
         if not all(os.environ.get(k) for k in ['HINT_API_BASE','HINT_MODEL','HINT_API_KEY']):
             p.error('Set HINT_API_BASE, HINT_MODEL and HINT_API_KEY in environment, not CLI/config')
+        from .hint_api import MODEL
+        if os.environ['HINT_MODEL']!=MODEL:
+            p.error('This recipe is pinned to ALFWorld-final glm-5.3-flash; do not substitute the SFT annotation model')
         private=output/'private/hint_auth.json'; private.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
         fd=os.open(private,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
         with os.fdopen(fd,'w') as f:

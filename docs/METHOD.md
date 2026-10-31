@@ -140,12 +140,16 @@ not a claim of bitwise-identical two-versus-four-GPU runs.
 
 Local hints never reach Student generation, Student forward, reference forward
 or evaluation. Metadata is attached before flattening, then follows native
-row balancing/duplication. Requests are bounded to 3 attempts, cached on exact
-request/model/endpoint identity and issued at most once per distinct episode
-within a Teacher batch. Partial response validation preserves other valid hints.
-An API/schema/action/budget failure is per-position static-Teacher fallback,
-with coverage/reasons reported. It never changes the Actor's route label,
-rollout reward, GRPO participation or generation budget.
+row balancing/duplication. The exact ALFWorld-final protocol fixes
+`glm-5.3-flash`, temperature0, reasoning_effort=low and
+max_tokens=min(16384,1024+192*target_count). Six bounded transport attempts
+precede a retained-batch wait; auth/quota failure does not silently drop hints.
+Requests are cached on exact protocol/model/body/endpoint identity and grouped
+per complete episode. Output is an exact step-ID-to-string object, not an array.
+Schema/ID failure falls back for the requested group; a bad command/length only
+rejects that hint. A hint truncated by the native Teacher budget fails visibly.
+Neither case changes the Actor route, executed rollout, reward or generation
+budget. See `ALFWORLD_ALIGNMENT.md` and the pinned protocol source hashes.
 
 ## Evaluation interpretation
 

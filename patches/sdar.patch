@@ -55,7 +55,7 @@ index 8dfcb0d..f9f843c 100644
                      )
          
 +        if hint_records is not None:
-+            attach(hint_records, total_batch_list)
++            attach(hint_records, total_batch_list, envs.tasks)
          return total_batch_list, episode_rewards, episode_lengths, success, traj_uid, tool_callings
      
      def dynamic_multi_turn_loop(

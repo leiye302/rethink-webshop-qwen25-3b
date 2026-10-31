@@ -1,0 +1,25 @@
+{
+  "reference": "ALFWorld final actor-only episode-hints protocol",
+  "protocol_version": "actor_only_episode_hints_glm_v2_20261015",
+  "model": "glm-5.3-flash",
+  "temperature": 0,
+  "reasoning_effort": "low",
+  "max_tokens": "min(16384, 1024 + 192 * target_count)",
+  "response_format": {"type": "json_object"},
+  "source_files": {
+    "rethink_api_protocol.py": "ce4c90a088aff29173514fb08f6a8b8966c2b7f39eb0ad2202f9d91380eed539",
+    "rethink_benchmark_contract.py": "b0d10d5add932c7201c4a4f9f4bb842b2fdfb6867ea8b369bd938fdf6ead6b60"
+  },
+  "allowed_domain_adaptation": [
+    "benchmark=webshop in the unchanged cross-benchmark contract",
+    "native WebShop task/raw pre-action page/clickable and search commands",
+    "native executed shopping action and raw feedback",
+    "non-secret transport session identifier"
+  ],
+  "transport_failure": "hold_same_batch_no_actor_update",
+  "invalid_hint": "ordinary_static_skill_teacher_with_recorded_reason",
+  "truncated_teacher_hint": "fail_visibly_without_expanding_native_budget",
+  "analyzer_is_router": false,
+  "teacher": "no_grad_pre_update_current_actor",
+  "student_sees_hint": false
+}

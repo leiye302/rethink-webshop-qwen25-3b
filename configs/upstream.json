@@ -1,9 +1,9 @@
 {
   "repository": "https://github.com/ZJU-REAL/SDAR",
   "commit": "d511f043afe9199b8576fc99ea52e12d84841f32",
-  "patch_sha256": "85b50a78974117766efc523bf2b5e5a2234a9c21730a5a9791cd35c0981362f0",
+  "patch_sha256": "ca7286e86c71041e74427e4bfd69e25115d0c61f3ae49992de5901e51b80a69f",
   "patched_files": {
-    "agent_system/multi_turn_rollout/rollout_loop.py": "0fa693c95a065c9754ac90fec99ad6fe4964adeffeaebfb9331ca736c26f7e9e",
+    "agent_system/multi_turn_rollout/rollout_loop.py": "49d8e8a26a8f1e4a803f2056f0fab51cdbdf34333c0344d8e9bf198e7639546f",
     "verl/trainer/ppo/skillsd_ray_trainer.py": "e69f97ead512aaa6043c6503de3276aac9a2c27173db7fefd0129c6aa523ff25",
     "agent_system/environments/env_package/webshop/envs.py": "ca811dea4ac36e90f612b12f40a36327ceddeb581adce5bd9b998810ed0f9547"
   },
