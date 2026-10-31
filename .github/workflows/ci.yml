@@ -22,3 +22,21 @@ jobs:
         run: pytest -q
       - name: Publication privacy and historical blobs
         run: python scripts/check_release.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Native text-environment dependencies (no Actor or API)
+        run: |
+          pip install torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r configs/requirements-native-cpu.txt
+      - name: Actual shared140 worker reset, search and feedback at seeds1000/1001/1139
+        env:
+          PYTHONPATH: src
+          OPENBLAS_NUM_THREADS: '1'
+          MKL_NUM_THREADS: '1'
+          OMP_NUM_THREADS: '1'
+          _JAVA_OPTIONS: '-XX:+UseSerialGC -Xss512k -Xmx1g'
+        run: |
+          python -m rethink_webshop.assets --download --nlp --index --verify
+          python scripts/smoke_native.py

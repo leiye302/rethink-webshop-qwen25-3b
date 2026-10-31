@@ -42,7 +42,7 @@ def native_view(sdar, history_length=2):
 
 
 class NativeWorld:
-    def __init__(self, sdar, assets):
+    def __init__(self, sdar, assets, evaluation_seed=None):
         import sys
         self.sdar, self.assets = Path(sdar).resolve(), Path(assets).resolve()
         import json
@@ -55,7 +55,11 @@ class NativeWorld:
         self.env_class = WebAgentTextEnv
         self.projection = load_module(self.sdar / "agent_system/environments/env_package/webshop/projection.py",
                                       "pinned_webshop_projection").webshop_projection
-        c = config()
+        c = dict(config())
+        if evaluation_seed is not None:
+            if not 1000 <= evaluation_seed < 1140:
+                raise ValueError("Shared140 evaluation seeds must be 1000..1139")
+            c["environment_seed"] = evaluation_seed
         catalog = "items_shuffle_1000.json" if c["use_small"] else "items_shuffle.json"
         attributes = "items_ins_v2_1000.json" if c["use_small"] else "items_ins_v2.json"
         self.kwargs = {"observation_mode": "text", "seed": c["environment_seed"],
@@ -68,6 +72,15 @@ class NativeWorld:
         self.base = self.env_class(**self.kwargs)
         if c["full_catalog_required"] and len(self.base.server.all_products) <= 1_000_000:
             raise ValueError("Refusing to label a 1k preview as the full WebShop catalog")
+        if evaluation_seed is not None:
+            import numpy as np
+            from rethink_webshop.task_split import partition_goals
+            server = self.base.server
+            server.goals = partition_goals(server.goals, False)
+            server.weights = [goal["weight"] for goal in server.goals]
+            server.cum_weights = [0] + np.cumsum(server.weights).tolist()
+            server.user_sessions.clear()
+            self.base.reset(session=0)
         self.goals = self.base.server.goals
         self.identity = {"products": len(self.base.server.all_products), "goals": len(self.goals),
                          "goal_order_sha256": digest(self.goals), "human_goals": c["human_goals"],
@@ -110,5 +123,8 @@ def source_identity(sdar):
     names = ["agent_system/environments/prompts/webshop.py", "agent_system/memory/memory.py",
              "agent_system/environments/env_manager.py", "agent_system/environments/env_package/webshop/projection.py",
              "agent_system/environments/env_package/webshop/envs.py", "verl/trainer/ppo/sdar_utils.py",
-             "examples/grpo_opsd_trainer/run_webshop_3b.sh", "verl/trainer/config/ppo_trainer.yaml"]
+             "examples/grpo_opsd_trainer/run_webshop_3b.sh", "verl/trainer/config/ppo_trainer.yaml",
+             "agent_system/environments/env_package/webshop/webshop/web_agent_site/engine/goal.py",
+             "agent_system/environments/env_package/webshop/webshop/web_agent_site/engine/engine.py",
+             "agent_system/environments/env_package/webshop/webshop/web_agent_site/envs/web_agent_text_env.py"]
     return {name: file_sha(root / name) for name in names}

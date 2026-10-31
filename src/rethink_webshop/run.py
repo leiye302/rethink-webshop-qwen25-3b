@@ -12,7 +12,7 @@ def placeholders():
     """Same text-only placeholder rows as SDAR prepare.py, no unrelated images."""
     import pandas as pd
     target=ROOT/'datasets/rl/text'; target.mkdir(parents=True,exist_ok=True)
-    for split,count,name in [('train',16,'train.parquet'),('test',128,'test.parquet')]:
+    for split,count,name in [('train',16,'train.parquet'),('test',140,'test.parquet')]:
         rows=[{'data_source':'text','prompt':[{'role':'user','content':''}],
                'ability':'agent','extra_info':{'split':split,'index':i}} for i in range(count)]
         pd.DataFrame(rows).to_parquet(target/name,index=False)
@@ -35,11 +35,14 @@ def resolved(actor,output,baseline=False):
        'trainer.validation_data_dir':str(output/'validation'),
        'trainer.experiment_name':'baseline' if baseline else 'rethink',
        'ray_init.address':'local',
+       'ray_init.runtime_env.env_vars.RETHINK_RUN_DIR':str(output),
        'ray_init.runtime_env.env_vars.PYTHONPATH':os.pathsep.join([str(ROOT/'src'),str(UPSTREAM)]),
        'ray_init.runtime_env.env_vars.JAVA_HOME':str(ROOT/'assets/java'),
        'ray_init.runtime_env.env_vars.JVM_PATH':str(ROOT/'assets/java/lib/server/libjvm.so')})
     for key,value in overrides.items():
         OmegaConf.update(cfg,key,value,merge=False,force_add=True)
+    from evaluation_contract import verify_shared_evaluation
+    verify_shared_evaluation(ROOT, settings)
     return cfg
 
 
@@ -93,7 +96,7 @@ def resume_checkpoint(output):
     return checkpoint
 
 
-def main():
+def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--baseline',action='store_true',help='Same public GRPO+OPSD beta5 from base, no local hints')
     p.add_argument('--actor',help='Project-relative Actor override; default is released/locally trained SFT1500')
@@ -101,7 +104,10 @@ def main():
     p.add_argument('--allow-api-cost',action='store_true')
     p.add_argument('--prepare-only',action='store_true')
     p.add_argument('--resume',action='store_true')
-    a=p.parse_args()
+    p.add_argument('--eval-only',action='store_true',help='Shared140 native vLLM evaluation; no API or optimizer update')
+    a=p.parse_args(argv)
+    if a.eval_only and a.resume:
+        p.error('--eval-only cannot resume a training curve')
     from .setup import verify_framework
     verify_framework(); placeholders()
     size=load('model.json')['size']
@@ -110,6 +116,9 @@ def main():
     output=confined(a.run_dir)
     cfg=resolved(actor,output,a.baseline)
     from omegaconf import OmegaConf
+    if a.eval_only:
+        OmegaConf.update(cfg,'trainer.val_only',True,force_add=True)
+        OmegaConf.update(cfg,'algorithm.local_hints.enabled',False,force_add=True)
     if a.prepare_only:
         output.mkdir(parents=True,exist_ok=True)
         OmegaConf.save(cfg,output/'prepared_config.yaml')
@@ -121,7 +130,7 @@ def main():
     hardware=check_cuda(torch)
     from .assets import verify as verify_assets
     verify_assets()
-    identity=validate_actor(actor,a.baseline)
+    identity=validate_actor(actor,a.baseline or a.eval_only)
     output.mkdir(parents=True,exist_ok=True)
     receipt=output/'launch_identity.json'
     if receipt.exists() and not a.resume:
@@ -129,12 +138,14 @@ def main():
     identity.update({'recipe_sha256':sha(ROOT/'configs/opsd.json'),'upstream_sha256':sha(ROOT/'configs/upstream.json'),
                      'hint_contract_sha256':{name:sha(ROOT/'src/rethink_webshop'/name)
                          for name in ['hint_api.py','hints.py','rethink_api_protocol.py','rethink_benchmark_contract.py']},
-                     'actor':str(actor.relative_to(ROOT)),'validation_sha256':sha(ROOT/'configs/eval128.json'),
-                     'world_size':WORLD_SIZE,'rollout_tensor_parallel':2})
+                     'actor':str(actor.relative_to(ROOT)),'validation_sha256':sha(ROOT/'configs/fixed_validation140.json'),
+                     'task_split_sha256':sha(ROOT/'configs/task_split.json'),
+                     'evaluation_protocol_sha256':sha(ROOT/'configs/evaluation_protocol.json'),
+                     'world_size':WORLD_SIZE,'rollout_tensor_parallel':2,'eval_only':a.eval_only})
     if a.resume and (not receipt.exists() or json.loads(receipt.read_text())!=identity):
         raise ValueError('Resume Actor/recipe/validation identity mismatch')
     private=None
-    if not a.baseline:
+    if not a.baseline and not a.eval_only:
         if not a.allow_api_cost:
             p.error('Method uses an external API: --allow-api-cost is required')
         if not all(os.environ.get(k) for k in ['HINT_API_BASE','HINT_MODEL','HINT_API_KEY']):

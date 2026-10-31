@@ -6,7 +6,7 @@ from rethink_webshop.common import UPSTREAM,load,ROOT
 def test_minimal_patch_and_native_losses():
     lock=load('upstream.json')
     assert set(lock['patched_files'])=={'agent_system/multi_turn_rollout/rollout_loop.py',
-          'agent_system/environments/env_package/webshop/envs.py','verl/trainer/ppo/skillsd_ray_trainer.py'}
+          'agent_system/environments/env_package/webshop/envs.py','verl/trainer/ppo/skillsd_ray_trainer.py','verl/trainer/main_sdar.py'}
     assert (ROOT/'patches/sdar.patch').stat().st_size<10000
     if not UPSTREAM.exists():
         pytest.skip('Prepare public SDAR to run the source-integrity check')

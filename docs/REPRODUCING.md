@@ -55,7 +55,7 @@ reference micro-batches16/32/32 are preserved by halving per-GPU micro-batches.
 Native decision padding still uses32. Four GPUs do not increase16×8 episodes.
 Baseline/method and both sizes share these hardware settings.
 
-The128 train plus128 validation native environment actors reserve25.6 logical
+The128 train plus140 validation native environment actors reserve26.8 logical
 Ray CPUs at0.1 each, before model workers/driver. Provide at least32 schedulable
 CPUs and plan256–512GiB host RAM (prefer512GiB); actors load native product,
 NLP and Java state. These are capacity recommendations, not measured minima.
@@ -65,9 +65,9 @@ during resume; host RAM matters as well as VRAM.
 Four-A100 CUDA/NCCL/vLLM memory fit and throughput remain unverified without the
 actual cards. The four-process CPU Gloo test checks the production partition,
 loss scaling, updates and checkpoint/RNG resume, not BF16/NCCL bitwise parity.
-Run the disposable four-GPU SFT preflight before training. Offline evaluation
-still uses one GPU to preserve the fixed greedy protocol; other SFT ranks wait
-at the boundary instead of writing duplicate evaluation evidence.
+Run the disposable four-GPU SFT preflight before training. The in-training SFT probe uses one GPU while other SFT ranks wait; its200-H
+probe is greedy and its native140-task probe samples at0.4. Standalone formal
+evaluation uses the same four-GPU native vLLM path as RL validation.
 
 ## SFT exact resume
 
@@ -117,23 +117,19 @@ Syntactic legality is not proof of semantically helpful hints.
 
 ## Native evaluation and metrics
 
-The same fixed128 goal IDs are selected by
-`numpy.random.RandomState(0).choice(range(500),128,replace=False)`, all with
-native synthetic goal seed0. SFT source tasks live at500+. The raw public code
-has randomized validation and worker-dependent goal seeds; this matched protocol
-fix is applied equally to both model sizes and baseline/method.
+All methods and both sizes use exactly the same shared140 manifest, worker
+seeds1000..1139, and native sampling at temperature0.4 (top-p1, top-k unrestricted,
+one rollout). History2, prompt4096, response512 and15 environment steps are unchanged.
+The standalone `scripts/eval.sh` now uses the native four-GPU vLLM evaluation
+path without APIs, not the legacy one-GPU greedy128 suite. The SFT loss/greedy200
+diagnostic is separate; its native environment probe also uses shared140 tasks
+and temperature0.4. See [the exact common contract](SHARED_EVALUATION140.md).
 
-Native RL validation uses sampling/temperature.4, max15 actions, response512;
-offline SFT evaluation is greedy. The Actor always starts an empty assistant
-prefix for free generation; no stored source R, target marker, correction or
-future feedback is prefilled. The fixed200 prompt subset does include source
-Good/Bad provenance but does not classify new R automatically.
+Old128 scores are not relabeled and legacy run directories cannot be resumed
+into a changed evaluation identity. SFT data and released checkpoint weights
+are unchanged; do not infer that the historical SFT data was held out by the
+new RL split.
 
-Native success is `done and raw_score == 1.0`, sparse training reward10 for
-success/0 otherwise. Score summaries can be expressed as raw0..1 or percentage;
-label the scale. Report both score and success, as partial matches need not be
-successes. RETHINK rate counts decisions with at least one generated marker ID
-divided by active decisions, independent of text-special-token filtering.
 The native projector is unchanged; stricter protocol metrics are telemetry,
 not a new action acceptance/retry policy.
 

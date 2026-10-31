@@ -4,9 +4,12 @@
     "agent_system/memory/memory.py": "d9940bf9d49442f76667b80aff7e80b7c93f37bef015b06641e60229bb3f0d9c",
     "agent_system/environments/env_manager.py": "6294aef97cf12775222b8c189273f990065ecca13d1308650311ebe0ab1c64f5",
     "agent_system/environments/env_package/webshop/projection.py": "0808d4643459acf2a4c496eab3fc8735025c440f28cc517066355a1f5fbc048f",
-    "agent_system/environments/env_package/webshop/envs.py": "ca811dea4ac36e90f612b12f40a36327ceddeb581adce5bd9b998810ed0f9547",
+    "agent_system/environments/env_package/webshop/envs.py": "3a16368c20c6398b69a17e88a607213bc226c4756faaacd715b14898f1d5d03e",
     "verl/trainer/ppo/sdar_utils.py": "329ee3a73e05d3ab9817dd59d69394dd6ba3df85ca9abe9ddebc0e2c2682ad68",
     "examples/grpo_opsd_trainer/run_webshop_3b.sh": "c49f6359016a47d8138c056a1d22bd4ed520130a9bd3b8cf9e7c7deb356ce4fb",
-    "verl/trainer/config/ppo_trainer.yaml": "0f69218f169aed29a827818ca76fb26f7c1c5632bd9cbe318884617d5aa228cc"
+    "verl/trainer/config/ppo_trainer.yaml": "0f69218f169aed29a827818ca76fb26f7c1c5632bd9cbe318884617d5aa228cc",
+    "agent_system/environments/env_package/webshop/webshop/web_agent_site/engine/goal.py": "9703c8583244e2041182eb14856186b998145ab16ce2ba9aef8cb680877c8ed5",
+    "agent_system/environments/env_package/webshop/webshop/web_agent_site/engine/engine.py": "86bb46b593d3672da3a9fbe216f1d34a34a7a915f7ad31a101bdcc7f2a62ca4b",
+    "agent_system/environments/env_package/webshop/webshop/web_agent_site/envs/web_agent_text_env.py": "a2a2cfe3e7ef493857ba68c28fd6d12ec012e0f8cb31a050112f6466084e3f55"
   }
 }

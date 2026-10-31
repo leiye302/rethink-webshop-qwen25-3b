@@ -28,13 +28,22 @@ class NativeSessionWorker:
         if any(settings.get(key) != value for key, value in expected.items()):
             raise ValueError("Native configuration differs from the agreed pinned synthetic-goal protocol")
         self.root = Path(root).resolve()
-        self.world = NativeWorld(self.root / ".deps/sdar", self.root / ".deps/sdar/agent_system/environments/env_package/webshop/webshop/data")
+        from rethink_webshop.fixed_validation import manifest
+        self.selection = {row["task_id"]: row for row in manifest()["selection"]}
+        self.world_class = NativeWorld
+        self.world = self.new_world(1000)
+        self.first_world_available = True
         self.digest = digest
         self.native_sources = source_identity(self.root / ".deps/sdar")
-        if len(self.world.goals) < 500 or self.world.identity["products"] != 1000:
-            raise ValueError("Expected 1000 products and at least 500 synthetic goals")
+        if len(self.world.goals) != 140 or self.world.identity["products"] != 1000:
+            raise ValueError("Expected 1000 products and the shared140 synthetic goals")
         self.sessions = {}
         self.seen = set()
+
+    def new_world(self, seed):
+        return self.world_class(self.root / ".deps/sdar",
+            self.root / ".deps/sdar/agent_system/environments/env_package/webshop/webshop/data",
+            evaluation_seed=seed)
 
     @property
     def ready(self):
@@ -54,21 +63,31 @@ class NativeSessionWorker:
             session, task = item["session_id"], item["task_id"]
             if not isinstance(session, str) or not session or session in self.seen:
                 raise ValueError("Native sessions must have unique, nonempty IDs")
-            if not isinstance(task, int) or isinstance(task, bool) or not 0 <= task < 500:
-                raise ValueError("Native eval goals must come from reserved IDs 0..499")
+            selected = self.selection.get(task)
+            if selected is None or item.get("worker_seed") != selected["worker_seed"] or item.get("goal_index") != selected["goal_index"]:
+                raise ValueError("Task/seed/index differs from the cross-method shared140 manifest")
         for item in items:
             session, task = item["session_id"], item["task_id"]
-            env, view, obs = self.world.reset(task, session)
+            selected = self.selection[task]
+            if self.first_world_available and selected["worker_seed"] == 1000:
+                world = self.world
+                self.first_world_available = False
+            else:
+                world = self.new_world(selected["worker_seed"])
+            env, view, obs = world.reset(selected["goal_index"], session)
             try:
-                state = self.world.visible(env, view, obs)
+                state = world.visible(env, view, obs)
             except BaseException:
                 env.close()
                 raise
-            self.sessions[session] = {"env": env, "view": view, "state": state, "done": False, "steps": 0}
+            self.sessions[session] = {"env": env, "world": world, "view": view, "state": state, "done": False, "steps": 0}
             self.seen.add(session)
             # Hashes bind identity without disclosing private goal attributes or
             # future answers.  Only state.prompt reaches the model in the parent.
-            goal = self.world.goals[task]
+            goal = world.goals[selected["goal_index"]]
+            from rethink_webshop.task_split import task_identity
+            if task_identity(goal) != task:
+                raise ValueError("Actual native reset differs from the fixed content task")
             result.append({"session_id": session, "task_id": task, "state": state,
                            "task_sha256": self.digest(goal),
                            "instruction_sha256": self.digest(goal["instruction_text"])})
@@ -94,7 +113,7 @@ class NativeSessionWorker:
             # The unchanged pinned projector performs its own extraction,
             # lowercase/strip, and last-20-character malformed fallback.  Do not
             # replace malformed actions or add protocol/availability gates.
-            transition = self.world.step(session["env"], session["view"],
+            transition = session["world"].step(session["env"], session["view"],
                                          before["formatted_observation"], response)
             session["steps"] += 1
             session["done"] = transition["done"]
@@ -102,7 +121,7 @@ class NativeSessionWorker:
             fallback = lower.find("<action>") == -1 or lower.find("</action>") == -1
             next_state = None
             if not transition["done"]:
-                next_state = self.world.visible(session["env"], session["view"],
+                next_state = session["world"].visible(session["env"], session["view"],
                                                 transition["next_observation"])
                 session["state"] = next_state
             result.append({"session_id": session_id, "result": transition,
@@ -114,6 +133,7 @@ class NativeSessionWorker:
             session = self.sessions.pop(session_id, None)
             if session is not None:
                 session["env"].close()
+                session["world"].base.close()
         return {"closed_session_ids": list(identifiers)}
 
     def close(self):

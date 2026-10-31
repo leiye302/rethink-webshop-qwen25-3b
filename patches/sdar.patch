@@ -1,27 +1,40 @@
 diff --git a/agent_system/environments/env_package/webshop/envs.py b/agent_system/environments/env_package/webshop/envs.py
-index 9d320bc..1c857db 100644
 --- a/agent_system/environments/env_package/webshop/envs.py
 +++ b/agent_system/environments/env_package/webshop/envs.py
-@@ -120,7 +120,8 @@ class WebshopMultiProcessEnv(gym.Env):
-         env_worker = ray.remote(**resources_per_worker)(WebshopWorker)
+@@ -117,10 +117,11 @@
+         self._env_kwargs = env_kwargs if env_kwargs is not None else {'observation_mode': 'text', 'num_products': None}
+ 
+         # -------------------------- Ray actors setup --------------------------
+-        env_worker = ray.remote(**resources_per_worker)(WebshopWorker)
++        from rethink_webshop.webshop_worker import DisjointWebshopWorker
++        env_worker = ray.remote(**resources_per_worker)(DisjointWebshopWorker)
          self._workers = []
          for i in range(self.num_processes):
 -            worker = env_worker.remote(seed + (i // self.group_n), self._env_kwargs)
-+            from rethink_webshop.validation import seed_for_worker
-+            worker = env_worker.remote(seed_for_worker(seed, i, self.group_n, is_train), self._env_kwargs)
++            worker = env_worker.remote(seed + (i // self.group_n), self._env_kwargs, is_train)
              self._workers.append(worker)
  
          # Get goals from the first worker
-@@ -173,7 +174,8 @@ class WebshopMultiProcessEnv(gym.Env):
-         return obs_list, reward_list, done_list, info_list
+@@ -138,10 +139,8 @@
+         # else:
+         #     self.goal_idxs = range(len(self.env.server.goals))
  
-     def reset(self):
--        idx = self._rng.choice(self.goal_idxs, size=self.env_num, replace=False)
-+        from rethink_webshop.validation import goal_indices
-+        idx = goal_indices(self._rng, self.goal_idxs, self.env_num, self.is_train)
-         idx = np.repeat(idx, self.group_n).tolist()
+-        if not self.is_train:
+-            self.goal_idxs = range(500)
+-        else:
+-            self.goal_idxs = range(500, len(goals))
++        # Every worker has already removed the opposite content split.
++        self.goal_idxs = range(len(goals))
  
-         # Send reset commands to all workers
+         print(self.goal_idxs)
+ 
+@@ -254,4 +253,4 @@
+         resources_per_worker=resources_per_worker,
+         is_train=is_train,
+         env_kwargs=env_kwargs,
+-    )
+\ No newline at end of file
++    )
 diff --git a/agent_system/multi_turn_rollout/rollout_loop.py b/agent_system/multi_turn_rollout/rollout_loop.py
 index 8dfcb0d..f9f843c 100644
 --- a/agent_system/multi_turn_rollout/rollout_loop.py
@@ -74,3 +87,15 @@ index a82cfea..a0769bb 100644
                          batch.batch["teacher_log_probs"] = teacher_log_probs
  
                      if self.use_reference_policy:
+diff --git a/verl/trainer/main_sdar.py b/verl/trainer/main_sdar.py
+--- a/verl/trainer/main_sdar.py
++++ b/verl/trainer/main_sdar.py
+@@ -164,7 +164,7 @@
+         print(f"[SDAR] sdar_coef: {config.actor_rollout_ref.actor.sdar_loss_coef}")
+         print(f"[SDAR] gate_beta: {config.actor_rollout_ref.actor.sdar_gate_beta}")
+ 
+-        from verl.trainer.ppo.skillsd_ray_trainer import SkillSDRayTrainer
++        from rethink_webshop.trainer import WebShopTrainer as SkillSDRayTrainer
+ 
+         trainer = SkillSDRayTrainer(
+             config=config,

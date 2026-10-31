@@ -7,7 +7,8 @@ The patch is only 3 files; the complete diff is `patches/sdar.patch`.
 |---|---|
 | `rollout_loop.py` | Retain special tokens; capture Actor marker IDs, pre-action state/commands and feedback; attach episode/step identity before native flattening |
 | `skillsd_ray_trainer.py` | Select ordinary native Teacher scoring or extra-context scoring; native losses/advantages stay unchanged |
-| `webshop/envs.py` | Use identical fixed128 evaluation goals and seed0 goal identities; **training reset/sampling remains native** |
+| `main_sdar.py` | Import a read-only validation-telemetry subclass; inherited training/Teacher/loss unchanged |
+| `webshop/envs.py` | Filter content-disjoint goal pools and use the shared140 validation tasks/seeds; native training sampling is retained within the allowed pool |
 
 Extra code lives in `src/rethink_webshop`, not copied modifications throughout
 the optimizer. `sdar_utils.py`, `dp_actor.py`, `core_algos.py`, native Teacher
@@ -22,7 +23,7 @@ Configuration changes versus `examples/grpo_opsd_trainer/run_webshop_3b.sh`:
   Route-SFT1500 for1.5B. Baseline explicitly starts the corresponding base.
 - Actor-marker Teacher-local hints enabled only for method.
 - Explicit150 updates, validation every10, save every20/final150, latest2.
-- Fixed128 native evaluation identities/seed for matched comparisons.
+- Shared140 content identities and worker seeds for all method/size comparisons.
 - Console logging/local output paths; no account tracking key is required.
 - Single-node4×A100-80GB profile: native FSDP4, rollout TP2×DP2; Actor micro4/GPU
   and rollout/reference logprob micro8/GPU retain the old global micro-batches

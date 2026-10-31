@@ -33,7 +33,7 @@ UPSTREAM_COMMIT = "d511f043afe9199b8576fc99ea52e12d84841f32"
 MAX_PROMPT_TOKENS = 4096
 MAX_NEW_TOKENS = 512
 MAX_ENV_STEPS = 15
-NATIVE_TASKS = 128
+NATIVE_TASKS = 140
 MARKER = "<RETHINK>"
 
 
@@ -178,7 +178,7 @@ def generation_metrics(text, ids, marker_id, eos_ids):
             "truncated": len(ids) >= MAX_NEW_TOKENS and not terminated}
 
 
-def generate_batch(model, tokenizer, prompts, marker, device):
+def generate_batch(model, tokenizer, prompts, marker, device, benchmark=False):
     """One greedy batch from the actual empty-assistant chat template.
 
     prompts is a list of (evidence_key, literal_visible_H).  Padding is explicit
@@ -213,9 +213,10 @@ def generate_batch(model, tokenizer, prompts, marker, device):
             length = item["prompt_token_count"]
             input_ids[index, -length:] = torch.tensor(item["prompt_token_ids"], device=device)
             attention[index, -length:] = 1
+        sampling = dict(temperature=.4, top_p=1., top_k=0, repetition_penalty=1.) if benchmark else {}
         with _autocast(device):
             result = model.generate(input_ids=input_ids, attention_mask=attention,
-                                    do_sample=False, num_beams=1, num_return_sequences=1,
+                                    do_sample=benchmark, num_beams=1, num_return_sequences=1, **sampling,
                                     max_new_tokens=MAX_NEW_TOKENS, eos_token_id=eos,
                                     pad_token_id=pad, use_cache=True,
                                     return_dict_in_generate=True, output_scores=False)
@@ -316,19 +317,16 @@ def evaluate_generation(model, tokenizer, rows, marker, cfg, output, device):
 
 
 def fixed_native_tasks(path):
-    # A private RandomState never touches the training NumPy RNG.  This manifest
-    # is created once beside the checkpoint eval directories and then verified.
-    path = Path(path)
-    expected = {"schema": "webshop-native-eval-tasks-v1", "selection_seed": 0,
-                "selection_algorithm": "numpy.random.RandomState(0).choice(range(500),128,replace=False)",
-                "reserved_goal_pool": [0, 500], "task_count": NATIVE_TASKS,
-                "task_ids": np.random.RandomState(0).choice(range(500), size=NATIVE_TASKS,
-                                                           replace=False).tolist()}
+    from rethink_webshop.fixed_validation import manifest
+    fixed = manifest()
+    expected = {"schema": "webshop-shared140-native-eval-v1", "task_count": NATIVE_TASKS,
+                "selection": fixed["selection"],
+                "task_ids": [row["task_id"] for row in fixed["selection"]]}
     expected["tasks_sha256"] = digest(expected["task_ids"])
+    path = Path(path)
     if path.exists():
-        saved = json.loads(path.read_text(encoding="utf-8"))
-        if saved != expected:
-            raise ValueError("Fixed native evaluation tasks changed: " + str(path))
+        if json.loads(path.read_text(encoding="utf-8")) != expected:
+            raise ValueError("Fixed native evaluation tasks changed; start a new shared140 run")
     else:
         _atomic_json(path, expected)
     return expected
@@ -441,11 +439,11 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
         raise ValueError("Native concurrency must be 8 or 16; generation batch size 1..16")
     protocol = {"upstream_commit": UPSTREAM_COMMIT,
                 "benchmark": "SDAR native WebShop; 1000 products and synthetic goals, NOT full human WebShop",
-                "val_data_size_reference": "examples/grpo_opsd_trainer/run_webshop_3b.sh: val_data_size=128",
+                "shared_evaluation_contract": "configs/evaluation_protocol.json",
                 "task_selection": tasks, "rollouts_per_task": 1, "history_length": 2,
-                "environment_seed": 0, "max_steps": MAX_ENV_STEPS,
+                "environment_seeds": list(range(1000, 1140)), "max_steps": MAX_ENV_STEPS,
                 "max_prompt_tokens": MAX_PROMPT_TOKENS, "prompt_truncation": "error",
-                "max_new_tokens": MAX_NEW_TOKENS, "do_sample": False,
+                "max_new_tokens": MAX_NEW_TOKENS, "do_sample": True, "temperature": .4, "top_p": 1., "top_k": -1,
                 "assistant_prefill": "", "skip_special_tokens": False,
                 "native_projection_unchanged": True, "native_rewards_unchanged": True,
                 "forced_route": False, "retries": 0, "teacher_or_hint": False,
@@ -453,6 +451,8 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
                 "rule_reward": "10 if successful else 0", "concurrent_episodes": concurrency,
                 "generation_batch_size": batch_size}
     episodes, metrics = [], []
+    selections = {row["task_id"]: row for row in tasks["selection"]}
+    initial_observations = {}
     pending = deque(tasks["task_ids"])
     active = {}
     worker = None
@@ -461,7 +461,7 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
         identity = worker.ready["identity"]
         if identity["products"] != 1000 or identity["human_goals"] or not identity["use_small"]:
             raise ValueError("Native environment is not the agreed 1000-product synthetic-goal setup")
-        if identity["upstream_commit"] != UPSTREAM_COMMIT or identity["environment_seed"] != 0:
+        if identity["upstream_commit"] != UPSTREAM_COMMIT or identity["environment_seed"] != 1000:
             raise ValueError("Native environment seed/commit changed")
         manifest = {"protocol": protocol, "protocol_sha256": digest(protocol),
                     "environment": identity, "native_sources": worker.ready["native_sources"],
@@ -475,8 +475,10 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
                 reset_items = []
                 while pending and len(active) + len(reset_items) < concurrency:
                     task_id = pending.popleft()
-                    session = f"eval{int(step):06d}_goal{task_id:05d}"
-                    reset_items.append({"session_id": session, "task_id": task_id})
+                    selected = selections[task_id]
+                    session = f"eval{int(step):06d}_goal{selected['goal_index']:05d}"
+                    reset_items.append({"session_id": session, "task_id": task_id,
+                                        "goal_index": selected["goal_index"], "worker_seed": selected["worker_seed"]})
                 if reset_items:
                     response = worker.request("reset", items=reset_items)
                     if len(response["items"]) != len(reset_items):
@@ -484,6 +486,7 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
                     for expected, item in zip(reset_items, response["items"]):
                         if item["session_id"] != expected["session_id"] or item["task_id"] != expected["task_id"]:
                             raise ValueError("Native reset order/identity changed")
+                        initial_observations[item["task_id"]] = item["state"]["observation"]
                         active[item["session_id"]] = {**item, "steps": 0, "executed_actions": []}
                 # Process every live episode once before refilling.  Completion
                 # never selects a replacement rollout of the same goal.
@@ -494,7 +497,7 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
                     prompts = [(session + f"_s{active[session]['steps']:02d}",
                                 active[session]["state"]["prompt"]) for session in sessions]
                     try:
-                        generated = generate_batch(model, tokenizer, prompts, marker, device)
+                        generated = generate_batch(model, tokenizer, prompts, marker, device, benchmark=True)
                     except PromptBudgetError as error:
                         for item in error.records:
                             session = next(s for s in sessions if item["key"].startswith(s + "_s"))
@@ -565,7 +568,16 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
                              "tasks_sha256": tasks["tasks_sha256"], "updated_unix": time.time()})
         if len(episodes) != NATIVE_TASKS or {e["task_id"] for e in episodes} != set(tasks["task_ids"]):
             raise ValueError("Native evaluation must have exactly one episode for each fixed goal")
-        summary = {"count": len(episodes), "decisions": len(metrics),
+        from rethink_webshop.fixed_validation import digest as fixed_digest, record_identity
+        from evaluation_contract import MANIFEST_SHA256, SPLIT_SHA256
+        fixed_identity = {"protocol": "webshop-shared140-v1",
+            "manifest_sha256": MANIFEST_SHA256, "task_split_sha256": SPLIT_SHA256,
+            "task_ids": tasks["task_ids"], "selection_sha256": fixed_digest(tasks["selection"]),
+            "initial_observations_sha256": fixed_digest([initial_observations[k] for k in tasks["task_ids"]])}
+        from rethink_webshop.fixed_validation import manifest as fixed_manifest
+        fixed_identity["protocol"] = fixed_manifest()["protocol"]
+        record_identity(output.parent, fixed_identity)
+        summary = {"fixed_validation_identity": fixed_identity, "count": len(episodes), "decisions": len(metrics),
                    "raw_task_score_mean": sum(row["raw_task_score"] for row in episodes) / len(episodes),
                    "success_count": sum(row["success"] for row in episodes),
                    "success_rate": sum(row["success"] for row in episodes) / len(episodes),
@@ -596,7 +608,7 @@ def evaluate_native(model, tokenizer, marker, cfg, step, output, device, tasks):
 
 
 def run_suite(model, tokenizer, rows, valenc, marker, cfg, step, output):
-    """Full 902-row loss, fixed 200-H generation, and fixed 128 native episodes."""
+    """Full 902-row loss, fixed 200-H generation, and shared140 native episodes (T=0.4); greedy200 is a separate diagnostic."""
     if int(step) not in (0, 750, 1500):
         raise ValueError("Frozen evaluation checkpoints are 0, 750, and 1500")
     if len(rows) != 902 or len(valenc) != 902:

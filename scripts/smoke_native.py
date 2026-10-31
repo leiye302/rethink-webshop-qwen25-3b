@@ -1,33 +1,41 @@
-"""A real CPU-only native reset/action/feedback check; no model or API."""
+"""Exercise the actual shared140 CPU worker, including per-task seeds; no API/model."""
 import json
 import os
 from pathlib import Path
 import sys
+
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'src'))
+sys.path[:0]=[str(ROOT/'src'),str(ROOT/'src/sft')]
 os.environ['CUDA_VISIBLE_DEVICES']=''
-from webshop_data.native import NativeWorld
-from rethink_webshop.common import UPSTREAM,WEBSHOP,load
+from rethink_webshop.fixed_validation import manifest
 from rethink_webshop.setup import verify_framework
+from native_worker import NativeSessionWorker
 
 verify_framework()
-world=NativeWorld(UPSTREAM,WEBSHOP/'data')
-env=None
+fixed=manifest()
+selected=[fixed['selection'][i] for i in (0,1,139)]
+worker=NativeSessionWorker(ROOT)
 try:
-    assert world.identity['products']==1000 and world.identity['environment_seed']==0
-    goal=load('eval128.json')['task_ids'][0]
-    env,view,obs=world.reset(goal,'cpu_public_smoke')
-    state=world.visible(env,view,obs)
-    assert state['available_actions']['has_search_bar']
-    step=world.step(env,view,state['formatted_observation'],
-         '<think>I will search for a candidate product.</think><action>search[shirt]</action>')
-    assert step['native_format_valid'] and step['next_observation']
-    if not step['done']:
-        next_state=world.visible(env,view,step['next_observation'])
-        assert next_state['prompt']!=state['prompt']
-    print(json.dumps({'passed':True,'cpu_only':True,'real_native_environment':True,
-           'model_loaded':False,'api_called':False,'task_id':goal,'identity':world.identity,
-           'executed_action':step['environment_action'],'feedback_returned':True},ensure_ascii=False))
+    assert worker.ready['identity']['products']==1000
+    assert worker.ready['identity']['environment_seed']==1000
+    items=[dict(session_id='cpu_smoke_'+str(row['worker']),
+                task_id=row['task_id'],worker_seed=row['worker_seed'],
+                goal_index=row['goal_index']) for row in selected]
+    states=worker.reset(items)['items']
+    assert [row['task_id'] for row in states]==[row['task_id'] for row in selected]
+    assert all(row['state']['available_actions']['has_search_bar'] for row in states)
+    steps=[dict(session_id=row['session_id'],
+                response='<think>Search for a candidate.</think><action>search[shirt]</action>',
+                expected_state_sha256=row['state']['state_sha256']) for row in states]
+    result=worker.step(steps)['items']
+    assert len(result)==3
+    assert all(row['result']['native_format_valid'] for row in result)
+    assert all(row['result']['next_observation'] for row in result)
+    assert all(row['next_state'] is not None for row in result if not row['result']['done'])
+    print(json.dumps({'passed':True,'cpu_only':True,'api_called':False,
+          'model_loaded':False,'task_ids':[r['task_id'] for r in states],
+          'seeds':[r['worker_seed'] for r in selected],
+          'native_state_feedback_verified':True,
+          'environment':worker.ready['identity']},ensure_ascii=False))
 finally:
-    if env is not None: env.close()
-    world.base.close()
+    worker.close()

@@ -9,13 +9,13 @@
   "algorithm.local_hints.timeout_seconds": 120,
   "algorithm.local_hints.retries": 5,
   "data.train_batch_size": 16,
-  "data.val_batch_size": 128,
+  "data.val_batch_size": 140,
   "data.max_prompt_length": 4096,
   "data.max_response_length": 512,
   "data.filter_overlong_prompts": true,
   "data.truncation": "error",
   "data.return_raw_chat": true,
-  "actor_rollout_ref.actor.optim.lr": 0.000001,
+  "actor_rollout_ref.actor.optim.lr": 1e-06,
   "actor_rollout_ref.model.use_remove_padding": true,
   "actor_rollout_ref.actor.ppo_mini_batch_size": 64,
   "actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu": 4,
@@ -47,7 +47,9 @@
   "env.rollout.n": 8,
   "env.resources_per_worker.num_cpus": 0.1,
   "trainer.critic_warmup": 0,
-  "trainer.logger": ["console"],
+  "trainer.logger": [
+    "console"
+  ],
   "trainer.project_name": "rethink_webshop",
   "trainer.n_gpus_per_node": 4,
   "trainer.nnodes": 1,
@@ -59,5 +61,8 @@
   "trainer.val_before_train": true,
   "trainer.max_actor_ckpt_to_keep": 2,
   "trainer.max_critic_ckpt_to_keep": 2,
-  "ray_init.num_gpus": 4
+  "ray_init.num_gpus": 4,
+  "actor_rollout_ref.rollout.val_kwargs.top_p": 1.0,
+  "actor_rollout_ref.rollout.val_kwargs.top_k": -1,
+  "actor_rollout_ref.rollout.val_kwargs.n": 1
 }

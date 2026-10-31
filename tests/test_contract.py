@@ -65,10 +65,10 @@ def test_native_fixed_validation():
     import numpy as np
     from rethink_webshop.validation import goal_indices,seed_for_worker
     rng=np.random.RandomState(92)
-    expected=np.random.RandomState(0).choice(range(500),128,replace=False)
-    assert np.array_equal(goal_indices(rng,range(500),128,False),expected)
-    assert np.array_equal(goal_indices(rng,range(500),128,False),expected)
-    assert seed_for_worker(1000,127,1,False)==0
+    expected=np.arange(140)
+    assert np.array_equal(goal_indices(rng,range(140),140,False),expected)
+    assert np.array_equal(goal_indices(rng,range(140),140,False),expected)
+    assert seed_for_worker(1000,139,1,False)==1139
     assert seed_for_worker(0,19,8,True)==2
 
 

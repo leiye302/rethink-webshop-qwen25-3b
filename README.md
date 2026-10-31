@@ -1,5 +1,8 @@
 # RETHINK WebShop — Qwen2.5-3B
 
+> Shared cross-method evaluation: [exact common140 tasks and unchanged sampling](docs/SHARED_EVALUATION140.md).
+
+
 Route-SFT followed by **public SDAR GRPO+OPSD (gate beta 5)**, with extra
 Teacher-only local hints at decisions where the **Actor itself generates
 `<RETHINK>`**. This repository starts stage 2 from the released **1500-step
@@ -23,7 +26,7 @@ preinstalled environments. Model weights are separate downloadable assets.
 | Hints | Static public SDAR WebShop skills everywhere; additional local API hint only at Actor-marker decisions |
 | Environment | SDAR default 1,000 products + synthetic goals, history 2, at most 15 actions |
 | Budgets | Prompt 4,096 / response 512; unchanged prompt/action parser/reward |
-| RL validation | Same fixed reserved 128 goals for both arms/sizes, every 10 updates |
+| RL validation | Same shared fixed140 content goals for both arms/sizes, every 10 updates |
 | RL checkpoints | Every 20 updates and final 150; latest two complete native checkpoints |
 
 No API judges the routes. Student inputs never contain hints or retrospective
@@ -111,7 +114,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_sft.sh
 The script first runs disposable numerical/memory checks, reloads the pinned base,
 then trains the unchanged loss/sampler. It saves complete resumable SFT checkpoints
 at 750/1500 and evaluates validation loss, 200 empty-assistant-prefix generations
-and the fixed 128 native episodes. Resume explicitly with
+and the shared140 native episodes (temperature0.4). Resume explicitly with
 `bash scripts/train_sft.sh --resume runs/sft/checkpoint_000750` under the same
 four-GPU allocation. SFT resume includes the four per-rank RNG states; old
 single/two-rank optimizer checkpoints cannot resume this topology. The released
@@ -126,17 +129,19 @@ An optional newly trained initialization can be selected by
 python -m rethink_webshop.setup --base --accept-model-license
 CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --baseline --run-dir runs/baseline
 
-# Frozen offline greedy evaluation, no API, same 128 goals and 200 source prompts.
-CUDA_VISIBLE_DEVICES=0 bash scripts/eval.sh --model assets/base --output runs/eval_base
-CUDA_VISIBLE_DEVICES=0 bash scripts/eval.sh --model assets/route-sft1500 --output runs/eval_sft1500
+# Formal native shared140 evaluation, no API, shared140 goals; native vLLM, temperature0.4.
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/eval.sh --model assets/base --output runs/eval_base
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/eval.sh --model assets/route-sft1500 --output runs/eval_sft1500
 ```
 
-Offline greedy scores and online RL validation with native temperature 0.4 are
-separate protocols, not interchangeable numbers. Success means native terminal
-score=1; mean task score, protocol/reasoning rates and decision-level marker rate
-are also reported. Marker rate is **not a fraction of all generated tokens** and
-is never a training stop gate. Source Good/Bad generation groups are not labels
-of the freshly generated reasoning, so they are not reported as route precision.
+Formal evaluation and RL validation use the same shared140 native protocol:
+temperature0.4, sampling, top-p1, unrestricted top-k, one rollout/task,
+history2, prompt4096, response512 and15 environment steps. No hint API is used
+at evaluation. The200-H greedy generation probe is a separate SFT diagnostic.
+Old128/greedy scores are not relabeled. See the exact shared contract above.
+Report native success and mean raw task score separately. Marker rate counts
+marker-bearing active decisions, not a fraction of generated tokens. Source
+Good/Bad groups are not labels for freshly generated reasoning.
 
 ## Method and verification boundaries
 

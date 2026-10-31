@@ -39,9 +39,9 @@
   "generation_max_new_tokens": 512,
   "generation_batch_size": 8,
   "generation_temperature": 0.0,
-  "benchmark_size": 128,
-  "benchmark_seed": 0,
-  "benchmark_goal_pool_size": 500,
+  "benchmark_size": 140,
+  "benchmark_seed": 1000,
+  "benchmark_goal_pool_size": 140,
   "benchmark_max_steps": 15,
   "benchmark_batch_size": 8,
   "max_prompt_tokens": 4096,
@@ -56,5 +56,7 @@
   "optimizer_backend": "native_torch_adamw_cuda_fp32",
   "cpu_python": ".venv-opsd/bin/python",
   "java_home": "assets/java",
-  "native_env_path": ".venv-opsd"
+  "native_env_path": ".venv-opsd",
+  "benchmark_temperature": 0.4,
+  "benchmark_do_sample": true
 }

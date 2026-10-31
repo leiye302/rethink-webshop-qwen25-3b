@@ -153,18 +153,26 @@ budget. See `ALFWORLD_ALIGNMENT.md` and the pinned protocol source hashes.
 
 ## Evaluation interpretation
 
-All arms/sizes use the fixed 128 reserved synthetic goals in `configs/eval128.json`,
-seed0 for goal identity, native score and success definition. Fixed sampling
-and matched validation seed are explicit protocol changes versus repeatedly
-sampling the public validation pool. They apply equally to baseline/method.
+All five methods and both sizes use the same shared140 synthetic-goal
+manifest, canonical ordered objective IDs and worker seeds1000..1139.
+Native prompt/history, projector, score and success definition stay unchanged.
+Validation objective variants are excluded from all RL training worker pools;
+training sampling remains native within the remaining allowed pool.
 
-Online RL validation: before training and every10 updates/final150, native
-temperature .4 with sampling. Offline frozen SFT comparison: greedy, the same
-128 goal IDs, plus200 validation states with newly generated R and action.
-Never equate these two decoding protocols. Report native success, mean raw score,
-reasoning/strict protocol rates, terminal purchase frequency and marker decisions
-/all active decisions. A source-Bad generation label is not a label for fresh R;
-assessing route precision/recall needs a separate blinded semantic audit.
+RL validation is before training and every10 updates/final150 in this recipe;
+its temperature remains0.4 with sampling, top-p1, unrestricted top-k and one
+rollout per task. The standalone formal evaluation uses this same native vLLM
+protocol, without APIs. History2, prompt4096, response512 and15 steps are retained.
+The SFT200-H greedy free-generation probe remains a separate diagnostic, not a
+benchmark score. Its native environment probe also now uses shared140/T=0.4.
+Old128 and greedy benchmark scores are not relabeled or mixed into new curves.
+See [the common cross-method evaluation contract](SHARED_EVALUATION140.md).
+
+Report native success, mean raw score, reasoning/protocol rates, terminal
+purchase frequency, and marker decisions/all active decisions. Source-Bad
+provenance is not a label for freshly generated reasoning; route precision or
+recall requires a separate blinded semantic audit. The new RL split does not
+retroactively establish non-exposure in historical SFT/skill data.
 
 No claim of perfect labels, guaranteed reasoning preservation, 1.5B measured
 performance, or a newly completed stage-2 run follows from source/CPU tests.
