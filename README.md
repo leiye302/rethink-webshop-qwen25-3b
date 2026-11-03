@@ -3,22 +3,27 @@
 > Shared cross-method evaluation: [exact common140 tasks and unchanged sampling](docs/SHARED_EVALUATION140.md).
 
 
-Route-SFT followed by **public SDAR GRPO+OPSD (gate beta 5)**, with extra
+An independently runnable **3B base → Route-SFT → GRPO+OPSD** recipe.
+Route-SFT is followed by **public SDAR GRPO+OPSD (gate beta 5)**, with extra
 Teacher-only local hints at decisions where the **Actor itself generates
-`<RETHINK>`**. This repository starts stage 2 from the released **1500-step
-WebShop Route-SFT checkpoint**, not from SEED/M1 or an Analyzer checkpoint.
+`<RETHINK>`**. Run Stage1 on the current **buy-v9** database, then initialize
+Stage2 from that run's complete **1500-step local checkpoint**, not an old release,
+SEED/M1 or an Analyzer checkpoint.
 
 The [1.5B companion](https://github.com/leiye302/rethink-webshop-qwen25-1.5b)
-starts from its public base and trains the same frozen SFT data first.
+also starts from its public base and trains SFT first. The exact same buy-v9
+profile is published there under `data/buy_v9`; select that profile explicitly
+when matching data across sizes. Here buy-v9 is already the active default.
 Neither repository needs the authors' computer, servers, private datasets or
 preinstalled environments. Model weights are separate downloadable assets.
+See [the versioned data and fresh-run instructions](docs/DATA_BUY_V9.md).
 
 ## What is fixed
 
 | Component | Recipe |
 |---|---|
 | Base | Qwen2.5-3B-Instruct, pinned revision in `configs/model.json` |
-| SFT data | 7,500 natural Good + 4,500 reviewed Bad; identical in both repositories |
+| SFT data | buy-v9: 7,500 natural Good + 4,500 reviewed Bad; matches the 1.5B buy-v9 profile |
 | SFT | 1 epoch / 1,500 updates; every batch 5 Good + 3 Bad; full parameters |
 | SFT loss | Sample-mean route/action/EOS CE + 0.1 independent full-vocabulary marker BCE; **no reference KL** |
 | Stage 2 | 150 GRPO+OPSD updates; beta=5, distillation coefficient=0.01 |
@@ -75,25 +80,54 @@ checksum-pinned WebShop assets and builds native Lucene indexes. All caches,
 models and runs below this checkout are ignored by Git. No paid API or training
 is started during preparation. See [the environment/resource details](docs/REPRODUCING.md).
 
-## 3B: start from the existing SFT checkpoint
-
-The original FP32 inference shards, tokenizer and configs are available as
-[release assets](https://github.com/leiye302/rethink-webshop-qwen25-3b/releases/tag/route-sft1500-v1).
-The downloader verifies **every file's size and SHA-256**, including the release
-manifest. No optimizer/RNG states or training logs are published.
-This is an initialization checkpoint, **not** an exact resume of SFT.
+## Stage1: retrain Route-SFT from the 3B base
 
 Read and accept the [Qwen Research License](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/blob/aa8e72537993ba99e69dfaafa59ed015b17504d1/LICENSE)
 before downloading the 3B weights; they are **not Apache-2.0 model weights**.
 
 ```bash
-python -m rethink_webshop.setup --checkpoint1500 --accept-model-license
+python3.12 -m venv .venv-sft
+.venv-sft/bin/pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+.venv-sft/bin/pip install -r configs/requirements-sft.txt
+python -m rethink_webshop.setup --base --accept-model-license
+.venv-sft/bin/python -m rethink_webshop.audit_data
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_sft.sh
+```
+
+The unchanged SFT script first runs disposable numerical/memory checks, reloads
+the pinned base, then trains 1500 updates. It saves complete resumable SFT
+checkpoints at750/1500 and evaluates validation loss,200 truly free generations
+and the shared140 native episodes. Resume only this same data/recipe/world size
+with `bash scripts/train_sft.sh --resume runs/sft/checkpoint_000750`.
+Do not resume an optimizer trained on the old database, overwrite old extracted
+data or relabel an old model as buy-v9. See [fresh-run migration](docs/DATA_BUY_V9.md).
+
+## Stage2: initialize from the newly trained SFT1500
+
+```bash
 export HINT_API_BASE="https://your-provider.example/v1"
 export HINT_MODEL="glm-5.3-flash"
 read -rsp 'Hint API key: ' HINT_API_KEY; echo
 export HINT_API_KEY
 CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --allow-api-cost
 ```
+
+The default Actor is **`runs/sft/checkpoint_001500/model`**. Stage2 verifies the
+complete Stage1 manifest,1500 updates,3B parent,current SFT recipe,buy-v9 row
+hashes and model file hashes. Missing/intermediate/old-data checkpoints are
+rejected; there is no automatic fallback to the old released weights.
+Only the model initializes RL: the SFT optimizer is not restored into GRPO.
+
+After preparation and API configuration, the two stages can be run sequentially:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_sft.sh &&
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --allow-api-cost
+```
+
+Stage2 starts only after Stage1 exits successfully. No trigger-rate or
+performance threshold is added. Model size,losses,batches,RL gate and shared140
+evaluation are unchanged by this pipeline/data-selection update.
 
 Use a compatible provider serving the fixed `glm-5.3-flash` model and final
 ALFWorld request parameters; do not substitute the annotation model.
@@ -115,27 +149,13 @@ Do not put keys in command arguments. Proxy use is unchanged by default; opt out
 only if appropriate for your network with `RETHINK_HINT_TRUST_ENV=false`.
 See [API diagnosis, failure handling and update/resume boundaries](docs/API_TROUBLESHOOTING.md).
 
-## Optional: reproduce Route-SFT from base
+## Historical released weights
 
-```bash
-python3.12 -m venv .venv-sft
-.venv-sft/bin/pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-.venv-sft/bin/pip install -r configs/requirements-sft.txt
-python -m rethink_webshop.setup --base --accept-model-license
-.venv-sft/bin/python -m rethink_webshop.audit_data
-CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_sft.sh
-```
-
-The script first runs disposable numerical/memory checks, reloads the pinned base,
-then trains the unchanged loss/sampler. It saves complete resumable SFT checkpoints
-at 750/1500 and evaluates validation loss, 200 empty-assistant-prefix generations
-and the shared140 native episodes (temperature0.4). Resume explicitly with
-`bash scripts/train_sft.sh --resume runs/sft/checkpoint_000750` under the same
-four-GPU allocation. SFT resume includes the four per-rank RNG states; old
-single/two-rank optimizer checkpoints cannot resume this topology. The released
-inference weights remain valid for fresh four-GPU stage2 initialization.
-An optional newly trained initialization can be selected by
-`--actor runs/sft/checkpoint_001500/model` for stage 2.
+The original [route-sft1500-v1 release](https://github.com/leiye302/rethink-webshop-qwen25-3b/releases/tag/route-sft1500-v1)
+retains its original FP32 inference weights,tokenizer and SHA-locked provenance.
+Those weights used the prior database; they are not the result of this new
+buy-v9 Stage1 and are not accepted as its Stage2 start. The historical resource
+and license information remain available; no old model is relabeled or deleted.
 
 ## Matched baseline and evaluation
 
@@ -146,7 +166,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/train_opsd.sh --baseline --run-dir run
 
 # Formal native shared140 evaluation, no API, shared140 goals; native vLLM, temperature0.4.
 CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/eval.sh --model assets/base --output runs/eval_base
-CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/eval.sh --model assets/route-sft1500 --output runs/eval_sft1500
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash scripts/eval.sh --model runs/sft/checkpoint_001500/model --output runs/eval_sft1500
 ```
 
 Formal evaluation and RL validation use the same shared140 native protocol:

@@ -5,8 +5,9 @@
 The policy starts directly from the pinned public Qwen2.5 Instruct model. No
 SEED Stage-1, M1, episode Analyzer or decision Analyzer SFT is a hidden prerequisite.
 The frozen dataset in this release was authored from ordinary **3B** online
-trajectories without RETHINK augmentation. Both model sizes deliberately reuse
-those same samples; this is not claimed to be 1.5B on-policy collection.
+trajectories without RETHINK augmentation. The active profile is buy-v9, also
+published as the 1.5B companion's explicit buy-v9 option. Match that profile
+when reusing data across sizes; it is not claimed to be 1.5B on-policy collection.
 
 The Actor sees the native task/history/current observation, followed by its
 recorded natural reasoning. No source action, future observation, hidden goal,
@@ -53,7 +54,9 @@ Train/validation task identities and task hashes are disjoint. The native
 benchmark pool 0..499 is separate from collected training tasks (500+). Complete
 source row fields are included unchanged in the ZIP: hashes are in
 `configs/data.json`. Train SHA-256 is
-`db060c4703fa0b0fba767696d32597be6d2bc22d7e9067ca054c6b0776180888`.
+`860a7b0ac73f91396089365947570c2f3052b2318d553ec1ac204964e78b9e59`.
+The buy-v9 purchase supplement and unchanged validation files are detailed in
+`DATA_BUY_V9.md`. Stage1 must be retrained; the old release used another database.
 The ZIP contains no server paths, API credentials, private logs or optimizer states.
 
 The original task/route-balanced sampler (`src/sft_reference`) visits every row

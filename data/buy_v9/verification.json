@@ -1,0 +1,30 @@
+{
+  "dataset_revision": "buy-v9",
+  "rows": 12000,
+  "train_good": 7500,
+  "train_bad": 4500,
+  "validation_rows": 902,
+  "generation_rows": 200,
+  "target_Buy_counts": {
+    "good": 176,
+    "bad": 92
+  },
+  "new_Good_Buy": 87,
+  "new_Bad_Buy": 30,
+  "all_new_Bad_exact_state_execution_checks_passed": 30,
+  "Good_fullscore_gate": false,
+  "Good_original_actions_preserved": true,
+  "validation_and_generation_files_unchanged": true,
+  "fixed140_exclusion_checks_passed": true,
+  "new_HR_duplicates_against_retained_train_or_validation": 0,
+  "full_actual_tokenizer_audit_passed": true,
+  "train_max_tokens": 2868,
+  "truncations": 0,
+  "joint_token_boundary_mismatches": 0,
+  "first_supervised_token_errors": 0,
+  "encoder_source_sha256": "634806f26c2f9a859523ead6707c89eb125c83715153d0dd48c6a204b07c119f",
+  "algorithm_or_recipe_changed": false,
+  "training_result_claimed": false,
+  "model_weights_or_optimizer_states_included": false,
+  "private_logs_or_credentials_included": false
+}

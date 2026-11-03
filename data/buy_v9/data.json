@@ -1,0 +1,31 @@
+{
+  "schema": "webshop-public-frozen-sft-buy-v9",
+  "dataset_revision": "buy-v9",
+  "user_authorized_repartition": true,
+  "train_good": 7500,
+  "train_bad": 4500,
+  "validation_good": 631,
+  "validation_bad": 271,
+  "generation_good": 100,
+  "generation_bad": 100,
+  "target_Buy_counts": {
+    "good": 176,
+    "bad": 92
+  },
+  "Good_original_actions_preserved": true,
+  "files": {
+    "train.jsonl": {
+      "bytes": 71094455,
+      "sha256": "860a7b0ac73f91396089365947570c2f3052b2318d553ec1ac204964e78b9e59"
+    },
+    "val.jsonl": {
+      "bytes": 5199383,
+      "sha256": "7d344341478091fd5bb9e592bcd25f4e563d12ac05131b5234fd79ad30d85fd1"
+    },
+    "generation_val200.jsonl": {
+      "bytes": 1157450,
+      "sha256": "85d40da59056ee405d4b99f5cad044f46d0567a3b405efcd97cd0ad2a18b9047"
+    }
+  },
+  "bundle_sha256": "34b25a42c2717bdee5d3a3bee8a955b4cffcdcc60ebbbfa3ca62a9c6693692f9"
+}

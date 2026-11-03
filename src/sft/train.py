@@ -176,6 +176,9 @@ def validate_dataset(root, cfg, core):
     manifest = read_json(manifest_path)
     if manifest.get("user_authorized_repartition") is not True:
         raise ValueError("Whole-task repartition authorization is missing")
+    selected = read_json(Path(root) / "configs/data.json")
+    if manifest.get("files") != selected["files"]:
+        raise ValueError("Extracted SFT data differs from the selected database; prepare a fresh checkout")
     for name, spec in manifest["files"].items():
         path = within(directory, name)
         if path.stat().st_size != spec["bytes"] or sha(path) != spec["sha256"]:

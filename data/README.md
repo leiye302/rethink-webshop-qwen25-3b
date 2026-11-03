@@ -3,9 +3,14 @@
 `frozen_sft.zip` is intentionally included (about9.8MB compressed). It contains
 the exact current training12000 rows, validation902, fixed-generation200 and a
 public manifest, not optimizer states or unfiltered private provenance logs.
-Both model-size repositories contain identical bytes; no paid reannotation is
-needed to reproduce SFT. `setup --data` verifies ZIP SHA before extraction and
+The active 3B default is **buy-v9**, also stored under `buy_v9/` with its lock
+and original publication verification. Its bytes match the 1.5B companion's
+explicit buy-v9 profile, not that repository's historical original default.
+No paid reannotation is needed to reproduce SFT. `setup --data` verifies ZIP SHA before extraction and
 each row-file SHA afterward, and refuses to replace different existing files.
+Use a fresh checkout/run for this revision; do not overlay a previously
+extracted old database or reuse an old SFT optimizer/checkpoint. See
+[versioned data and Stage1 instructions](../docs/DATA_BUY_V9.md).
 
 Only `prompt`, `assistant_prefix` and `response` determine model input/target.
 Other fields are audit metadata and must not be concatenated into Actor input.

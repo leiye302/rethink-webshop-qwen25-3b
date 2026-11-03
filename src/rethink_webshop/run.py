@@ -99,7 +99,7 @@ def resume_checkpoint(output):
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--baseline',action='store_true',help='Same public GRPO+OPSD beta5 from base, no local hints')
-    p.add_argument('--actor',help='Project-relative Actor override; default is released/locally trained SFT1500')
+    p.add_argument('--actor',help='Project-relative complete local SFT1500 model; default runs/sft/checkpoint_001500/model')
     p.add_argument('--run-dir',default='runs/opsd')
     p.add_argument('--allow-api-cost',action='store_true')
     p.add_argument('--prepare-only',action='store_true')
@@ -110,9 +110,8 @@ def main(argv=None):
         p.error('--eval-only cannot resume a training curve')
     from .setup import verify_framework
     verify_framework(); placeholders()
-    size=load('model.json')['size']
-    default='assets/base' if a.baseline else ('assets/route-sft1500' if size=='3b' else 'runs/sft/checkpoint_001500/model')
-    actor=confined(a.actor or default)
+    from .stages import default_actor
+    actor=confined(a.actor or default_actor(a.baseline))
     output=confined(a.run_dir)
     cfg=resolved(actor,output,a.baseline)
     from omegaconf import OmegaConf
@@ -131,6 +130,9 @@ def main(argv=None):
     from .assets import verify as verify_assets
     verify_assets()
     identity=validate_actor(actor,a.baseline or a.eval_only)
+    if not a.baseline and not a.eval_only:
+        from .stages import verify_sft_handoff
+        identity['sft_handoff']=verify_sft_handoff(actor,identity['weight_sha256'])
     output.mkdir(parents=True,exist_ok=True)
     receipt=output/'launch_identity.json'
     if receipt.exists() and not a.resume:

@@ -11,9 +11,12 @@
 - Base revisions/files: `configs/model.lock.json`, downloaded from public
   Hugging Face, verified against pinned LFS SHA256 or Git blob identity.
 - Frozen data: `data/frozen_sft.zip`, byte hashes in `configs/data.json`.
-- Exact3B SFT1500 inference export: public release; all21 assets are locked in
+- Active data is buy-v9; use a fresh checkout and train Stage1 from the pinned3B
+  base before Stage2. See `DATA_BUY_V9.md`. No old optimizer/data is migrated.
+- Historical original3B SFT1500 inference export: public release; all21 assets are locked in
   `configs/checkpoint1500.json`. Original7 FP32 shards, no quantization/dtype
-  conversion. No resharding is needed for inference initialization.
+  conversion. It used the prior database, not buy-v9, and is not the current
+  Stage2 start. The current Actor is `runs/sft/checkpoint_001500/model`.
 - External hint API is optional only for baseline/evaluation; method training
   needs a compatible provider/key and cost consent; model is fixed to
   `glm-5.3-flash` by the final ALFWorld recipe.
@@ -94,9 +97,11 @@ Native SDAR owns FSDP saving/resume, rewards, all GRPO updates and native gate.
 Run `train_opsd.sh --resume --allow-api-cost` against the same directory only.
 The wrapper rejects a different Actor/config/validation/world-size identity and
 requires all4 native model/optimizer/extra-state rank shards plus dataloader state.
-Old single/two-rank optimizer states cannot resume this topology; inference-only
-model exports remain valid fresh initialization weights. Its default
-initialization is not “latest weights from another run.” Native latest2 retention
+Old single/two-rank optimizer states cannot resume this topology. The method's
+current initialization must be the complete local SFT1500 from the selected
+buy-v9 data, checked against its parent,recipe and model hashes. Historical
+inference-only exports can still be evaluated, not substituted for this run.
+The default is not “latest weights from another run.” Native latest2 retention
 keeps final150 as one of the latest2. No cross-server backup agent is required.
 
 Keys are entered via environment, then written to an ignored owner-only600
@@ -134,9 +139,10 @@ diagnostic is separate; its native environment probe also uses shared140 tasks
 and temperature0.4. See [the exact common contract](SHARED_EVALUATION140.md).
 
 Old128 scores are not relabeled and legacy run directories cannot be resumed
-into a changed evaluation identity. SFT data and released checkpoint weights
-are unchanged; do not infer that the historical SFT data was held out by the
-new RL split.
+into a changed evaluation identity. The shared140 protocol correction did not
+rewrite historical SFT data or checkpoint weights; do not infer that historical
+data was held out by the new RL split. The later buy-v9 database is a separately
+identified revision and requires a fresh Stage1 as described above.
 
 The native projector is unchanged; stricter protocol metrics are telemetry,
 not a new action acceptance/retry policy.

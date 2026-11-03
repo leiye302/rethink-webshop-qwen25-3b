@@ -1,5 +1,23 @@
 # Publication verification
 
+## Current3B buy-v9 base-first recipe (2026-11-03)
+
+The current default is public3B base → fresh buy-v9 SFT1500 → Stage2 from the
+complete local SFT checkpoint. The old published inference weights are retained
+as historical resources, not relabeled as a buy-v9 training result. See
+`DATA_BUY_V9.md` for the exact data hashes and unchanged scientific recipe.
+
+The current local CPU suite passed99 tests with one Windows platform skip.
+It includes the actual SFT loader/validator on all12000 training rows,5:3
+no-repeat ordering,old extracted-data rejection,and Stage2 receipt checks for
+wrong data,parent,recipe,intermediate/incomplete saves and modified model files.
+No new GPU training or paid hint API call was started for this update. GPU
+numerics,memory fit and task scores still require the documented real execution.
+
+The following historical checks retain their original scope. In particular,
+old claims about matched default data or released initialization refer to the
+older release, not a newly trained buy-v9 model.
+
 ## API resilience checks (2026-11-02)
 
 Both model-size trees passed **86 CPU tests with one Windows-only platform skip**,
