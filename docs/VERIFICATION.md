@@ -1,5 +1,19 @@
 # Publication verification
 
+## Windows Gloo checks (2026-11-03)
+
+The local Windows CPU suite passed **100 tests with no skips**, including four
+real Gloo/DDP processes,three production CE+BCE/AdamW updates compared with
+serial execution,and checkpoint/optimizer/scheduler/per-rank RNG resume.
+The previous blanket Windows skip was unnecessary on a Gloo-enabled build.
+Only builds genuinely lacking Gloo may skip that test. Both model-size
+repositories now also define a pinned torch2.8 Windows CI job which requires
+Gloo and executes the real four-process test. Linux CI remains in place.
+The local interpreter used a Gloo-enabled torch2.11 development build; the
+separate CI job checks pinned torch2.8. This update changes no3B training,
+data,hint,or evaluation recipe and establishes no CUDA/NCCL performance result.
+Earlier skipped-test counts below are historical,not the current local result.
+
 ## Current3B buy-v9 base-first recipe (2026-11-03)
 
 The current default is public3B base → fresh buy-v9 SFT1500 → Stage2 from the

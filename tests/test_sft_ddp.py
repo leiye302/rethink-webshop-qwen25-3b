@@ -1,7 +1,6 @@
 """Real 4-process Gloo check of the production sample-mean/DDP/checkpoint path."""
 from datetime import timedelta
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 import pytest
@@ -78,7 +77,7 @@ def worker(rank,rendezvous,directory):
         dist.destroy_process_group()
 
 
-@pytest.mark.skipif(os.name=='nt' or not dist.is_gloo_available(),reason='Linux CPU Gloo CI executes 4 real ranks')
+@pytest.mark.skipif(not dist.is_gloo_available(),reason='This PyTorch build has no CPU Gloo backend')
 def test_four_rank_gradient_update_checkpoint_rng_resume_matches_serial(tmp_path):
     torch.set_num_threads(1);torch.manual_seed(71)
     serial=TinyModel();optimizer=GpuResidentAdamW(serial,lr=2e-3)
